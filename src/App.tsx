@@ -10,6 +10,7 @@ import {
   LogOut, 
   Play, 
   User as UserIcon,
+  ChevronRight,
   Hand
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
@@ -72,6 +73,7 @@ interface CardComponentProps {
   card: Card;
   hidden: boolean;
   index: number;
+  key?: string | number;
 }
 
 const CardComponent = ({ card, hidden, index }: CardComponentProps) => {
@@ -126,9 +128,20 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const socketUrl = window.location.origin;
-    const newSocket = io(socketUrl, {
-      transports: ['polling', 'websocket'],
+    const handleResize = () => {
+      window.scrollTo(0, 0);
+    };
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+    };
+  }, []);
+
+  useEffect(() => {
+    const newSocket = io({
+      transports: ['websocket', 'polling'],
       reconnectionAttempts: 20,
       reconnectionDelay: 1000,
       timeout: 30000,
@@ -138,11 +151,21 @@ export default function App() {
 
     newSocket.on('connect', () => {
       setIsConnected(true);
-      if (name) newSocket.emit('joinRoom', { roomId, name });
+      console.log('Connected to server');
+      if (name) {
+        newSocket.emit('joinRoom', { roomId, name });
+      }
     });
     
-    newSocket.on('connect_error', () => setIsConnected(false));
-    newSocket.on('disconnect', () => setIsConnected(false));
+    newSocket.on('connect_error', (err) => {
+      console.error('Connection error:', err);
+      setIsConnected(false);
+    });
+
+    newSocket.on('disconnect', () => {
+      setIsConnected(false);
+      console.log('Disconnected from server');
+    });
 
     newSocket.on('gameState', (state: GameState) => {
       setGameState(state);
@@ -169,15 +192,20 @@ export default function App() {
     socket?.emit('action', { roomId, action, amount });
   };
 
-  const handleSideShow = () => socket?.emit('sideShowRequest', roomId);
+  const handleSideShow = () => {
+    socket?.emit('sideShowRequest', roomId);
+  };
+
   const respondSideShow = (accepted: boolean) => {
     socket?.emit('sideShowResponse', { roomId, accepted });
     setSideShowPrompt(null);
   };
 
   const handleRaise = () => {
-    const amount = prompt("Enter Raise Amount:", "10000");
-    if (amount && !isNaN(parseInt(amount))) takeAction('raise', parseInt(amount));
+    const amount = prompt("Enter Raise Amount (Unlimited):", "1000000");
+    if (amount && !isNaN(parseInt(amount))) {
+      takeAction('raise', parseInt(amount));
+    }
   };
 
   const openAdminPanel = () => {
@@ -188,12 +216,25 @@ export default function App() {
   const refreshAdminStats = () => socket?.emit('getAdminStats', name);
   const resetAllChips = () => { if (confirm("Reset ALL players?")) socket?.emit('resetAllChips', name); };
   const resetPlayerChips = (targetName: string) => socket?.emit('resetPlayerChips', { adminName: name, targetName });
-  const addPlayerChips = (targetName: string, amount: string = "5000000") => {
-    const customAmount = prompt(`Enter amount for ${targetName}:`, amount);
+  const addPlayerChips = (targetName: string, amount: string = "50000000") => {
+    const customAmount = prompt(`Enter amount to add for ${targetName}:`, amount);
     if (customAmount && !isNaN(parseInt(customAmount))) {
       socket?.emit('addPlayerChips', { adminName: name, targetName, amount: customAmount });
     }
   };
+
+  const rotatedPlayers = useMemo(() => {
+    if (!gameState) return [];
+    const players = [...gameState.players];
+    const myIndex = players.findIndex(p => p.id === socket?.id);
+    if (myIndex === -1) return players;
+    
+    const rotated = [];
+    for (let i = 0; i < players.length; i++) {
+      rotated.push(players[(myIndex + i) % players.length]);
+    }
+    return rotated;
+  }, [gameState, socket]);
 
   const currentPlayer = useMemo(() => gameState?.players.find(p => p.id === socket?.id), [gameState, socket]);
   const isMyTurn = useMemo(() => gameState?.players[gameState.currentTurn]?.id === socket?.id, [gameState, socket]);
@@ -210,8 +251,13 @@ export default function App() {
   }, [gameState, isMyTurn, currentPlayer]);
 
   const toggleFullscreen = () => {
-    if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(() => {});
-    else document.exitFullscreen();
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(err => {
+        console.error(`Error attempting to enable full-screen mode: ${err.message}`);
+      });
+    } else {
+      document.exitFullscreen();
+    }
   };
 
   if (showSplash) {
@@ -246,13 +292,11 @@ export default function App() {
 
   return (
     <div className="fixed inset-0 bg-[#050505] text-white font-sans overflow-hidden flex flex-col select-none touch-none">
-      {/* Orientation Warning */}
       <div className="portrait-warning fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center p-8 text-center">
         <h2 className="text-2xl font-black mb-2">PLEASE ROTATE DEVICE</h2>
         <p className="text-white/60">For the best experience, please play in landscape mode.</p>
       </div>
 
-      {/* Header */}
       <header className="absolute top-0 left-0 right-0 p-1 md:p-2 flex items-center justify-between border-b border-white/5 bg-black/60 backdrop-blur-xl z-50 shrink-0">
         <div className="flex items-center gap-2 md:gap-3">
           <div className="w-6 h-6 md:w-8 md:h-8 bg-red-600 rounded-lg flex items-center justify-center overflow-hidden border border-red-500/30">
@@ -284,18 +328,17 @@ export default function App() {
         </div>
       </header>
 
-      {/* Game Area */}
       <main className="absolute inset-0 z-0 flex flex-col items-center justify-center overflow-hidden bg-[#050505]">
         <div className="relative w-full h-full bg-emerald-950 flex items-center justify-center overflow-hidden">
           <div className="absolute inset-0 z-0">
             <img src={ASSETS.TABLE_BG} alt="Table BG" className="w-full h-full object-cover opacity-40" referrerPolicy="no-referrer" />
           </div>
           
-          {/* Central Pot Display */}
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center z-20 w-full max-w-[90vw]">
             {!gameState?.gameStarted && !gameState?.winner && (
               <button onClick={startGame} className="mb-2 md:mb-4 bg-red-600 hover:bg-red-500 text-white px-5 md:px-8 py-2 md:py-4 rounded-xl md:rounded-2xl font-black text-sm md:text-xl shadow-[0_0_30px_rgba(220,38,38,0.5)] animate-pulse border-2 border-red-400/30 active:scale-95 transition-transform">START GAME</button>
             )}
+            
             <div className="bg-zinc-950/90 backdrop-blur-2xl border border-red-500/40 px-3 md:px-8 py-1.5 md:py-4 rounded-xl md:rounded-[32px] shadow-[0_0_40px_rgba(0,0,0,0.8)] flex flex-col items-center min-w-[100px] md:min-w-[180px]">
               <span className="text-[5px] md:text-[9px] font-black uppercase tracking-[0.3em] text-red-500/80 mb-0.5">Total Pot</span>
               <div className="flex items-center gap-1 md:gap-2 text-base md:text-3xl font-black text-white">
@@ -303,12 +346,8 @@ export default function App() {
                 {gameState?.pot.toLocaleString() || 0}
               </div>
               <div className="mt-0.5 text-[5px] md:text-[10px] font-bold text-white/50 uppercase tracking-widest">Bet: {gameState?.lastBet.toLocaleString() || 0} • Round: {gameState?.roundCount || 0}/5</div>
-              {gameState?.gameStarted && !gameState.winner && (
-                <div className="mt-1.5 md:mt-3 w-full h-1 md:h-1.5 bg-white/5 rounded-full overflow-hidden border border-white/5">
-                  <motion.div className="h-full bg-gradient-to-r from-red-600 to-red-400" initial={{ width: "100%" }} animate={{ width: "0%" }} transition={{ duration: 30, ease: "linear" }} key={gameState.currentTurn} />
-                </div>
-              )}
             </div>
+            
             {gameState?.winner && (
               <motion.div initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="mt-4 bg-yellow-500 text-black px-4 py-1.5 rounded-full font-black text-[10px] md:text-xs uppercase tracking-widest shadow-[0_0_30px_rgba(234,179,8,0.4)] flex flex-col items-center border-2 border-yellow-300">
                 <span>🏆 {gameState.winner} Wins!</span>
@@ -317,24 +356,29 @@ export default function App() {
           </div>
 
           {/* Players Positioning */}
-          {gameState?.players.map((player, idx) => {
-            const angle = (idx / gameState.players.length) * 2 * Math.PI + Math.PI / 2;
+          {rotatedPlayers.map((player, idx) => {
+            const originalIdx = gameState?.players.findIndex(p => p.id === player.id);
+            const angle = (idx / rotatedPlayers.length) * 2 * Math.PI + Math.PI / 2;
             const isMobile = window.innerWidth < 768;
-            const radiusX = isMobile ? 36 : 32;
-            const radiusY = isMobile ? 34 : 30;
+            const radiusX = isMobile ? 38 : 32;
+            const radiusY = isMobile ? 30 : 30;
             const x = Math.cos(angle) * radiusX;
             const y = Math.sin(angle) * radiusY;
-            const isCurrent = gameState.currentTurn === idx;
+            const isCurrent = gameState?.currentTurn === originalIdx;
             const isMe = player.id === socket?.id;
+            const isTopHalf = y < -5; 
 
             return (
               <motion.div key={player.id} style={{ left: `${50 + x}%`, top: `${50 + y}%` }} className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-0.5 md:gap-2 z-30">
-                <div className="flex -space-x-8 md:-space-x-10 mb-0.5 scale-[0.5] md:scale-[0.8] origin-bottom">
-                  {player.hand.map((card: Card, cIdx: number) => (
-                    <CardComponent key={`${player.id}-${cIdx}`} card={card} hidden={isMe ? player.isBlind : !gameState.winner} index={cIdx} />
-                  ))}
-                </div>
-                <div className={`relative flex flex-col items-center ${player.isFolded ? 'opacity-40' : ''} scale-[0.7] md:scale-[0.9]`}>
+                {!isTopHalf && (
+                  <div className="flex -space-x-8 md:-space-x-10 mb-0.5 scale-[0.5] md:scale-[0.8] origin-bottom">
+                    {player.hand.map((card: Card, cIdx: number) => (
+                      <CardComponent key={`${player.id}-${cIdx}`} card={card} hidden={isMe ? player.isBlind : !gameState?.winner} index={cIdx} />
+                    ))}
+                  </div>
+                )}
+
+                <div className={`relative flex flex-col items-center ${player.isFolded ? 'opacity-40' : ''} scale-[0.6] xs:scale-[0.7] md:scale-[0.9]`}>
                   <div className={`w-7 h-7 md:w-12 md:h-12 rounded-lg md:rounded-xl border-2 flex items-center justify-center transition-all duration-500 ${isCurrent ? 'border-red-500 shadow-[0_0_15px_rgba(220,38,38,0.5)] scale-110 bg-red-500/30' : 'border-white/10 bg-black/60'}`}>
                     <UserIcon className={`w-3.5 h-3.5 md:w-6 md:h-6 ${isCurrent ? 'text-red-400' : 'text-white/40'}`} />
                   </div>
@@ -346,13 +390,20 @@ export default function App() {
                     </div>
                   </div>
                 </div>
+
+                {isTopHalf && (
+                  <div className="flex -space-x-8 md:-space-x-10 mt-0.5 scale-[0.5] md:scale-[0.8] origin-top">
+                    {player.hand.map((card: Card, cIdx: number) => (
+                      <CardComponent key={`${player.id}-${cIdx}`} card={card} hidden={isMe ? player.isBlind : !gameState?.winner} index={cIdx} />
+                    ))}
+                  </div>
+                )}
               </motion.div>
             );
           })}
         </div>
       </main>
 
-      {/* Controls */}
       <footer className="absolute bottom-0 left-0 right-0 p-2 md:p-3 bg-gradient-to-t from-black via-black/80 to-transparent z-40 shrink-0">
         <div className="max-w-5xl mx-auto flex items-end justify-between gap-2 md:gap-4">
           <div className="flex items-center gap-2 md:gap-4 bg-black/40 backdrop-blur-xl p-1.5 md:p-2.5 rounded-xl border border-white/5">
@@ -380,9 +431,6 @@ export default function App() {
                 {currentPlayer?.isBlind && (
                   <button onClick={() => takeAction('see')} className="bg-zinc-900/80 border border-white/10 text-white/80 font-black px-2 md:px-5 py-1.5 md:py-3 rounded-lg md:rounded-xl flex items-center gap-1 md:gap-2 text-[8px] md:text-xs uppercase tracking-widest hover:bg-zinc-800 transition-all active:scale-95"><Eye className="w-3 h-3 md:w-5 md:h-5 text-red-500" />See</button>
                 )}
-                {canSideShow && (
-                  <button onClick={handleSideShow} className="bg-zinc-900/80 border border-white/10 text-white/80 font-black px-2 md:px-5 py-1.5 md:py-3 rounded-lg md:rounded-xl text-[8px] md:text-xs uppercase tracking-widest hover:bg-zinc-800 transition-all active:scale-95">Side</button>
-                )}
                 <div className="flex items-stretch gap-0.5 shadow-2xl">
                   <button onClick={() => takeAction('chaal')} className="bg-red-600 text-white font-black px-3 md:px-8 py-1.5 md:py-3 rounded-l-lg md:rounded-l-xl shadow-[0_0_20px_rgba(220,38,38,0.3)] flex flex-col items-center uppercase tracking-widest min-w-[60px] md:min-w-[120px] hover:bg-red-500 transition-all active:scale-95">
                     <span className="text-[5px] md:text-[9px] font-black text-white/60">CHAAL</span>
@@ -396,7 +444,6 @@ export default function App() {
         </div>
       </footer>
 
-      {/* Side Show Prompt */}
       <AnimatePresence>
         {sideShowPrompt && (
           <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
@@ -406,47 +453,6 @@ export default function App() {
               <div className="flex gap-2 md:gap-4">
                 <button onClick={() => respondSideShow(false)} className="flex-1 bg-white/5 hover:bg-white/10 p-2 md:p-4 rounded-xl font-bold uppercase tracking-widest transition-all text-[10px] md:text-sm">Deny</button>
                 <button onClick={() => respondSideShow(true)} className="flex-1 bg-red-600 hover:bg-red-500 p-2 md:p-4 rounded-xl font-bold uppercase tracking-widest transition-all shadow-lg shadow-red-600/20 text-[10px] md:text-sm">Accept</button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Admin Dashboard */}
-      <AnimatePresence>
-        {showAdminPanel && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowAdminPanel(false)} className="absolute inset-0 bg-black/90 backdrop-blur-sm" />
-            <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} className="relative w-full max-w-2xl bg-[#1a1a1a] border border-white/10 rounded-2xl md:rounded-[2rem] overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-              <div className="p-3 md:p-6 border-b border-white/5 flex items-center justify-between bg-zinc-900/50">
-                <div className="flex items-center gap-2 md:gap-3"><Trophy className="w-4 h-4 md:w-6 md:h-6 text-red-500" /><h2 className="text-sm md:text-xl font-black uppercase tracking-tighter">Lucifer Dashboard</h2></div>
-                <div className="flex items-center gap-1 md:gap-2">
-                  <button onClick={refreshAdminStats} className="p-1.5 md:p-2 hover:bg-white/10 rounded-full transition-colors text-white/40 hover:text-white"><Play className="w-3.5 h-3.5 md:w-5 md:h-5 rotate-90" /></button>
-                  <button onClick={() => setShowAdminPanel(false)} className="p-1.5 md:p-2 hover:bg-white/10 rounded-full transition-colors"><LogOut className="w-3.5 h-3.5 md:w-5 md:h-5 text-white/40" /></button>
-                </div>
-              </div>
-              <div className="flex-1 overflow-y-auto p-3 md:p-6 space-y-3 md:space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-[9px] md:text-xs font-bold text-white/40 uppercase tracking-widest">Player Accounts ({adminStats.length})</span>
-                  <button onClick={resetAllChips} className="bg-red-600/20 hover:bg-red-600 text-red-500 hover:text-white border border-red-500/30 px-3 md:px-4 py-1.5 md:py-2 rounded-xl text-[9px] md:text-xs font-black uppercase tracking-widest transition-all">Reset All</button>
-                </div>
-                <div className="grid gap-1.5 md:gap-2">
-                  {adminStats.map((stat, i) => (
-                    <div key={stat.name} className="flex items-center justify-between p-2 md:p-4 bg-white/5 border border-white/5 rounded-xl md:rounded-2xl">
-                      <div className="flex items-center gap-2 md:gap-3">
-                        <div className="w-6 h-6 md:w-8 md:h-8 bg-zinc-800 rounded-lg flex items-center justify-center text-[10px] md:text-xs font-bold text-white/40">{i + 1}</div>
-                        <span className="text-xs md:text-base font-bold truncate max-w-[60px] md:max-w-none">{stat.name}</span>
-                      </div>
-                      <div className="flex items-center gap-2 md:gap-4">
-                        <div className="flex items-center gap-1 md:gap-2 text-yellow-500 font-black text-[10px] md:text-base"><Coins className="w-3 h-3 md:w-4 md:h-4" />{stat.chips.toLocaleString()}</div>
-                        <div className="flex items-center gap-1 md:gap-2">
-                          <button onClick={() => addPlayerChips(stat.name)} className="p-1.5 md:p-2 bg-green-600/10 hover:bg-green-600/20 border border-green-500/20 rounded-lg text-green-500 text-[8px] md:text-[10px] font-black uppercase transition-all">Add</button>
-                          <button onClick={() => resetPlayerChips(stat.name)} className="p-1.5 md:p-2 bg-red-600/10 hover:bg-red-600/20 border border-red-500/20 rounded-lg text-red-500 text-[8px] md:text-[10px] font-black uppercase transition-all">Reset</button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
               </div>
             </motion.div>
           </div>
