@@ -6,24 +6,33 @@
 }
 
 @layer base {
-  body {
-    @apply bg-[#050505] text-white antialiased;
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  html,
+  body,
+  #root {
     height: 100vh;
     height: 100dvh;
     width: 100vw;
     margin: 0;
     padding: 0;
-    overflow: hidden;
+    overflow: hidden !important;
     position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    touch-action: none;
+    -webkit-overflow-scrolling: none;
+    user-select: none;
+    -webkit-user-select: none;
   }
-  #root {
-    height: 100%;
-    width: 100%;
+
+  body {
+    @apply bg-[#050505] text-white antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 }
 
-/* Orientation Warning */
+/* Orientation Warning for Mobile Portrait */
 @media screen and (orientation: portrait) and (max-width: 768px) {
   .portrait-warning {
     display: flex !important;
@@ -34,20 +43,7 @@
   display: none;
 }
 
-/* Custom scrollbar */
+/* Custom scrollbar (though hidden) */
 ::-webkit-scrollbar {
-  width: 8px;
-}
-
-::-webkit-scrollbar-track {
-  @apply bg-transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  @apply bg-white/10 rounded-full hover:bg-white/20 transition-colors;
-}
-
-/* Card animations */
-.card-fan {
-  transform-origin: bottom center;
+  width: 0px;
 }
