@@ -9,8 +9,11 @@ import fs from 'fs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// --- Database Setup ---
 const db = new Database('game.db');
 db.exec(`CREATE TABLE IF NOT EXISTS players (name TEXT PRIMARY KEY, chips BIGINT DEFAULT 50000000)`);
+
+// Force update all players to 5 Crore chips
 db.prepare(`UPDATE players SET chips = 50000000`).run();
 
 const getPlayerChips = (name: string): number => {
@@ -48,11 +51,14 @@ async function startServer() {
     const ranks = hand.map(c => RANK_VALUE[c.rank]).sort((a, b) => b - a);
     const suits = hand.map(c => c.suit);
     const isFlush = suits[0] === suits[1] && suits[1] === suits[2];
+    
     let isStraight = false;
     if (ranks[0] === 14 && ranks[1] === 3 && ranks[2] === 2) isStraight = true;
     else if (ranks[0] - ranks[1] === 1 && ranks[1] - ranks[2] === 1) isStraight = true;
+
     const isTrail = ranks[0] === ranks[1] && ranks[1] === ranks[2];
     const isPair = ranks[0] === ranks[1] || ranks[1] === ranks[2] || ranks[0] === ranks[2];
+
     if (isTrail) return 6000000 + ranks[0];
     if (isFlush && isStraight) return 5000000 + (ranks[0] === 14 && ranks[1] === 3 ? 3 : ranks[0]);
     if (isStraight) return 4000000 + (ranks[0] === 14 && ranks[1] === 3 ? 3 : ranks[0]);
@@ -73,10 +79,12 @@ async function startServer() {
       for (const socketId of socketsInRoom) {
         const socket = io.sockets.sockets.get(socketId);
         if (socket) {
-          const stateToSend = JSON.parse(JSON.stringify(game));
+          const stateToSend = JSON.parse(JSON.stringify(game, (key, value) =>
+            typeof value === 'bigint' ? value.toString() : value
+          ));
           stateToSend.players.forEach((p: any) => {
             if (p.id !== socketId && !p.isBot) {
-              p.chips = -1; // Hidden chips flag
+              p.chips = -1;
             }
           });
           socket.emit("gameState", stateToSend);
@@ -131,24 +139,22 @@ async function startServer() {
     let active = game.players.filter((p: any) => !p.isFolded);
     if (active.length === 1) {
       game.winner = active[0].name;
-      active[0].chips += game.pot;
+      game.winnerChips = game.pot;
+      active[0].chips = Number(active[0].chips) + game.pot;
       if (!active[0].isBot) updatePlayerChips(active[0].name, active[0].chips);
       game.gameStarted = false;
       if (turnTimers[rid]) clearTimeout(turnTimers[rid]);
       emitGameState(rid);
-      setTimeout(() => checkAutoStart(rid), 3000);
       return;
     }
     const oldTurn = game.currentTurn;
     do { game.currentTurn = (game.currentTurn + 1) % game.players.length; } 
     while (game.players[game.currentTurn].isFolded);
     if (game.currentTurn <= oldTurn) game.roundCount++;
-    
     if (game.roundCount >= 5) {
       game.players.forEach((p: any) => { if (!p.isFolded) p.isBlind = false; });
       return resolveShowdown(rid);
     }
-    
     emitGameState(rid);
     startTurnTimer(rid);
     if (game.players[game.currentTurn].isBot) handleBotTurn(rid);
@@ -196,7 +202,6 @@ async function startServer() {
   function checkAutoStart(rid: string) {
     const game = rooms[rid];
     if (!game || game.gameStarted) return;
-    const realPlayers = game.players.filter((p: any) => !p.isBot);
     if (game.players.length >= 2) {
       if (autoStartTimers[rid]) clearInterval(autoStartTimers[rid]);
       game.autoStartIn = 5;
@@ -205,9 +210,7 @@ async function startServer() {
         if (game.autoStartIn <= 0) {
           clearInterval(autoStartTimers[rid]);
           startGame(rid);
-        } else {
-          emitGameState(rid);
-        }
+        } else emitGameState(rid);
       }, 1000);
     }
   }
@@ -236,18 +239,23 @@ async function startServer() {
             { id: "bot1", name: "😈 Lucifer Bot 1", chips: 500000000, hand: [], isFolded: false, isBlind: true, currentBet: 0, isBot: true },
             { id: "bot2", name: "🔥 Lucifer Bot 2", chips: 500000000, hand: [], isFolded: false, isBlind: true, currentBet: 0, isBot: true }
           ], 
-          pot: 0, currentTurn: 0, lastBet: 50000, gameStarted: false, winner: null, deck: [], roundCount: 0, autoStartIn: 0
+          pot: 0, currentTurn: 0, lastBet: 50000, gameStarted: false, winner: null, deck: [], roundCount: 0 
         };
       }
       const game = rooms[rid];
       const playerName = (name || "Player").trim();
+      if (!game.players.some((p: any) => p.id === "bot1")) {
+        game.players.unshift({ id: "bot1", name: "😈 Lucifer Bot 1", chips: 500000000, hand: [], isFolded: false, isBlind: true, currentBet: 0, isBot: true });
+      }
+      if (!game.players.some((p: any) => p.id === "bot2")) {
+        game.players.unshift({ id: "bot2", name: "🔥 Lucifer Bot 2", chips: 500000000, hand: [], isFolded: false, isBlind: true, currentBet: 0, isBot: true });
+      }
       const existingPlayer = game.players.find((p: any) => p.name === playerName);
       if (existingPlayer && !existingPlayer.isBot) {
         existingPlayer.id = socket.id;
         existingPlayer.chips = getPlayerChips(playerName);
         socket.join(rid);
-        emitGameState(rid);
-        return checkAutoStart(rid);
+        return emitGameState(rid);
       }
       socket.join(rid);
       game.players.push({ id: socket.id, name: playerName, chips: getPlayerChips(playerName), hand: [], isFolded: false, isBlind: true, currentBet: 0, isBot: false });
@@ -255,9 +263,7 @@ async function startServer() {
       checkAutoStart(rid);
     });
 
-    socket.on("startGame", (rid) => {
-      startGame(rid.trim().toLowerCase());
-    });
+    socket.on("startGame", (rid) => startGame(rid.trim().toLowerCase()));
 
     socket.on("action", ({ roomId, action, amount }) => {
       const rid = roomId.trim().toLowerCase();
@@ -268,15 +274,18 @@ async function startServer() {
       if (action === "fold") player.isFolded = true;
       else if (action === "chaal") {
         const bet = player.isBlind ? game.lastBet : game.lastBet * 2;
-        if (player.chips < bet) { player.isFolded = true; socket.emit("adminMessage", "❌ Not enough chips!"); }
+        if (player.chips < bet) player.isFolded = true;
         else { player.chips -= bet; game.pot += bet; }
       } else if (action === "raise") {
         const raiseAmount = amount ? parseInt(amount) : 100000;
         const newLastBet = game.lastBet + raiseAmount;
         const bet = player.isBlind ? newLastBet : newLastBet * 2;
-        if (player.chips < bet) { player.isFolded = true; socket.emit("adminMessage", "❌ Not enough chips!"); }
+        if (player.chips < bet) player.isFolded = true;
         else { game.lastBet = newLastBet; player.chips -= bet; game.pot += bet; }
-      } else if (action === "see") { player.isBlind = false; return emitGameState(rid); }
+      } else if (action === "see") {
+        player.isBlind = false;
+        return emitGameState(rid);
+      }
       if (!player.isBot) updatePlayerChips(player.name, player.chips);
       nextTurn(rid);
     });
@@ -288,16 +297,19 @@ async function startServer() {
       const currentPlayer = game.players[game.currentTurn];
       if (!currentPlayer || currentPlayer.id !== socket.id || currentPlayer.isBlind) return;
       let prevIdx = (game.currentTurn - 1 + game.players.length) % game.players.length;
-      while (game.players[prevIdx].isFolded) { prevIdx = (prevIdx - 1 + game.players.length) % game.players.length; }
+      while (game.players[prevIdx].isFolded) prevIdx = (prevIdx - 1 + game.players.length) % game.players.length;
       const prevPlayer = game.players[prevIdx];
-      if (prevPlayer.isBlind) return socket.emit("adminMessage", "❌ Cannot side show with Blind player!");
+      if (prevPlayer.isBlind) return socket.emit("adminMessage", "❌ Prev player is Blind!");
       const bet = game.lastBet * 2;
-      if (currentPlayer.chips < bet) return socket.emit("adminMessage", "❌ Not enough chips!");
-      currentPlayer.chips -= bet; game.pot += bet; updatePlayerChips(currentPlayer.name, currentPlayer.chips);
+      if (currentPlayer.chips < bet) return socket.emit("adminMessage", "❌ No chips!");
+      currentPlayer.chips -= bet; game.pot += bet;
+      updatePlayerChips(currentPlayer.name, currentPlayer.chips);
       if (prevPlayer.isBot) {
-        const s1 = getHandScore(currentPlayer.hand); const s2 = getHandScore(prevPlayer.hand);
-        if (s1 >= s2) { prevPlayer.isFolded = true; io.to(rid).emit("adminMessage", `🃏 ${currentPlayer.name} won side show!`); }
-        else { currentPlayer.isFolded = true; io.to(rid).emit("adminMessage", `🃏 ${prevPlayer.name} won side show!`); }
+        const score1 = getHandScore(currentPlayer.hand);
+        const score2 = getHandScore(prevPlayer.hand);
+        if (score1 >= score2) prevPlayer.isFolded = true;
+        else currentPlayer.isFolded = true;
+        emitGameState(rid);
         nextTurn(rid);
       } else {
         sideShowRequests[rid] = { from: currentPlayer.id, to: prevPlayer.id };
@@ -314,26 +326,50 @@ async function startServer() {
       const fromPlayer = game.players.find((p: any) => p.id === request.from);
       const toPlayer = game.players.find((p: any) => p.id === request.to);
       if (accepted && fromPlayer && toPlayer) {
-        const s1 = getHandScore(fromPlayer.hand); const s2 = getHandScore(toPlayer.hand);
-        if (s1 >= s2) { toPlayer.isFolded = true; io.to(rid).emit("adminMessage", `🃏 ${fromPlayer.name} won side show!`); }
-        else { fromPlayer.isFolded = true; io.to(rid).emit("adminMessage", `🃏 ${toPlayer.name} won side show!`); }
-      } else { io.to(rid).emit("adminMessage", `🃏 Side Show denied!`); }
-      delete sideShowRequests[rid]; nextTurn(rid);
+        const score1 = getHandScore(fromPlayer.hand);
+        const score2 = getHandScore(toPlayer.hand);
+        if (score1 >= score2) toPlayer.isFolded = true;
+        else fromPlayer.isFolded = true;
+      }
+      delete sideShowRequests[rid];
+      nextTurn(rid);
     });
 
     socket.on("disconnect", () => {
       Object.keys(rooms).forEach(rid => {
-        rooms[rid].players = rooms[rid].players.filter((p: any) => p.id !== socket.id || p.isBot);
-        emitGameState(rid);
-        if (rooms[rid].players.length < 2 && autoStartTimers[rid]) {
-          clearInterval(autoStartTimers[rid]);
-          rooms[rid].autoStartIn = 0;
+        const game = rooms[rid];
+        if (game) {
+          game.players = game.players.filter((p: any) => p.id !== socket.id || p.isBot);
+          emitGameState(rid);
         }
       });
     });
 
     socket.on("getAdminStats", (adminName) => {
       if (adminName?.trim().toLowerCase() === "admin") {
+        socket.emit("adminStats", db.prepare('SELECT name, chips FROM players ORDER BY chips DESC').all());
+      }
+    });
+
+    socket.on("resetAllChips", (adminName) => {
+      if (adminName?.trim().toLowerCase() !== "admin") return;
+      db.prepare('UPDATE players SET chips = 50000000').run();
+      Object.keys(rooms).forEach(rid => {
+        rooms[rid].players.forEach((p: any) => { p.chips = 50000000; });
+        emitGameState(rid);
+      });
+      socket.emit("adminStats", db.prepare('SELECT name, chips FROM players ORDER BY chips DESC').all());
+    });
+
+    socket.on("addPlayerChips", ({ adminName, targetName, amount }) => {
+      if (adminName?.trim().toLowerCase() === "admin") {
+        const addAmount = parseInt(amount);
+        if (isNaN(addAmount)) return;
+        db.prepare('UPDATE players SET chips = chips + ? WHERE name = ?').run(addAmount, targetName);
+        Object.keys(rooms).forEach(rid => {
+          const p = rooms[rid].players.find((pl: any) => pl.name === targetName);
+          if (p) { p.chips += addAmount; emitGameState(rid); }
+        });
         socket.emit("adminStats", db.prepare('SELECT name, chips FROM players ORDER BY chips DESC').all());
       }
     });
@@ -357,6 +393,6 @@ async function startServer() {
     app.get("*", (req, res) => res.sendFile(path.join(distPath, "index.html")));
   }
 
-  httpServer.listen(PORT, "0.0.0.0", () => { console.log(`Server live on ${PORT}`); });
+  httpServer.listen(PORT, "0.0.0.0", () => console.log(`Lucifer Server live on port ${PORT}`));
 }
 startServer();
