@@ -7,10 +7,14 @@
 
 @layer base {
   body {
-    @apply bg-[#050505] text-white antialiased overflow-hidden;
+    @apply bg-[#050505] text-white antialiased;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     height: 100vh;
+    height: 100dvh;
     width: 100vw;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
     position: fixed;
   }
   #root {
@@ -28,4 +32,22 @@
 
 .portrait-warning {
   display: none;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-white/10 rounded-full hover:bg-white/20 transition-colors;
+}
+
+/* Card animations */
+.card-fan {
+  transform-origin: bottom center;
 }
