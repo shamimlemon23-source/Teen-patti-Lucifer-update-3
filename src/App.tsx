@@ -247,14 +247,16 @@ export default function App() {
       </main>
 
       <footer className="absolute bottom-0 left-0 right-0 p-2 md:p-3 bg-gradient-to-t from-black via-black/80 to-transparent z-40">
-        <div className="max-w-5xl mx-auto flex items-end justify-between gap-2">
-          <div className="flex items-center gap-2 md:gap-4 bg-black/40 backdrop-blur-xl p-1.5 md:p-2.5 rounded-xl border border-white/5">
+        <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center md:items-end justify-between gap-2 md:gap-4">
+          {/* Balance & Bet Info */}
+          <div className="flex items-center gap-2 md:gap-4 bg-black/40 backdrop-blur-xl p-1.5 md:p-2.5 rounded-xl border border-white/5 w-full md:w-auto justify-center md:justify-start">
             <div className="flex flex-col"><span className="text-[5px] md:text-[8px] font-black text-white/30 uppercase">Balance</span><div className="flex items-center gap-1"><Coins className="w-3 h-3 md:w-5 md:h-5 text-yellow-500" /><span className="text-[10px] md:text-xl font-black text-white">{currentPlayer?.chips.toLocaleString() || 0}</span></div></div>
             <div className="h-5 md:h-8 w-px bg-white/10"></div>
             <div className="flex flex-col"><span className="text-[5px] md:text-[8px] font-black text-white/30 uppercase">Current Bet</span><div className="flex items-center gap-1"><Hand className="w-3 h-3 md:w-5 md:h-5 text-red-500" /><span className="text-[10px] md:text-xl font-black text-white">{gameState?.lastBet.toLocaleString() || 0}</span></div></div>
           </div>
 
-          <div className="flex items-center gap-1 md:gap-2">
+          {/* Action Buttons */}
+          <div className="flex items-center gap-1 md:gap-2 w-full md:w-auto justify-center md:justify-end overflow-x-auto no-scrollbar pb-1 md:pb-0">
             {isMyTurn && gameState?.gameStarted && !gameState.winner && (
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-1 md:gap-2">
                 <button onClick={() => takeAction('fold')} className="bg-zinc-900/90 border border-white/10 text-white font-black px-2 md:px-5 py-2 md:py-3 rounded-lg md:rounded-xl text-[8px] md:text-xs uppercase tracking-widest hover:bg-zinc-800">Fold</button>
