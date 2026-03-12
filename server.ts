@@ -12,8 +12,8 @@ const __dirname = path.dirname(__filename);
 // --- Database Setup ---
 const db = new Database('game.db');
 db.exec(`CREATE TABLE IF NOT EXISTS players (name TEXT PRIMARY KEY, chips BIGINT DEFAULT 50000000)`);
-db.prepare(`UPDATE players SET chips = 50000000`).run();
 
+// চিপস মাইনাস হওয়া রোধ করতে এবং ডিফল্ট চিপস নিশ্চিত করতে এই ফাংশন
 const getPlayerChips = (name: string): number => {
   const row = db.prepare('SELECT chips FROM players WHERE name = ?').get(name) as { chips: number } | undefined;
   if (row) return row.chips;
@@ -23,7 +23,9 @@ const getPlayerChips = (name: string): number => {
 };
 
 const updatePlayerChips = (name: string, chips: number) => {
-  db.prepare('UPDATE players SET chips = ? WHERE name = ?').run(chips, name);
+  // চিপস যাতে ০ এর নিচে না যায় তার চূড়ান্ত সুরক্ষা
+  const safeChips = Math.max(0, chips);
+  db.prepare('UPDATE players SET chips = ? WHERE name = ?').run(safeChips, name);
 };
 
 type Suit = 'hearts' | 'diamonds' | 'clubs' | 'spades';
@@ -53,6 +55,7 @@ async function startServer() {
   };
 
   function getHandScore(hand: Card[]) {
+    if (!hand || hand.length < 3) return 0;
     const ranks = hand.map(c => RANK_VALUE[c.rank]).sort((a, b) => b - a);
     const suits = hand.map(c => c.suit);
     const isFlush = suits[0] === suits[1] && suits[1] === suits[2];
@@ -67,7 +70,7 @@ async function startServer() {
     if (isStraight) return 4000000 + (ranks[0] === 14 && ranks[1] === 3 ? 3 : ranks[0]);
     if (isFlush) return 3000000 + ranks[0] * 10000 + ranks[1] * 100 + ranks[2];
     if (isPair) {
-      const pairRank = ranks[0] === ranks[1] ? ranks[0] : ranks[1];
+      const pairRank = ranks[0] === ranks[1] ? ranks[0] : (ranks[1] === ranks[2] ? ranks[1] : ranks[0]);
       const kicker = ranks[0] === ranks[1] ? ranks[2] : (ranks[1] === ranks[2] ? ranks[0] : ranks[1]);
       return 2000000 + pairRank * 100 + kicker;
     }
@@ -140,8 +143,7 @@ async function startServer() {
     let active = game.players.filter((p: any) => !p.isFolded);
     if (active.length === 1) {
       game.winner = active[0].name;
-      game.winnerChips = game.pot;
-      active[0].chips = Number(active[0].chips) + game.pot;
+      active[0].chips += game.pot;
       if (!active[0].isBot) updatePlayerChips(active[0].name, active[0].chips);
       game.gameStarted = false;
       if (turnTimers[rid]) clearTimeout(turnTimers[rid]);
@@ -220,13 +222,44 @@ async function startServer() {
   function startGame(rid: string) {
     const game = rooms[rid];
     if (game && game.players.length >= 2) {
-      game.gameStarted = true; game.deck = createDeck(); game.pot = 0; game.lastBet = 50000; game.winner = null; game.roundCount = 0; game.autoStartIn = 0;
+      game.gameStarted = true; 
+      game.deck = createDeck(); 
+      game.pot = 0; 
+      game.lastBet = 50000; 
+      game.winner = null; 
+      game.roundCount = 0; 
+      game.autoStartIn = 0;
+      
       game.players.forEach((p: any) => {
         p.hand = [game.deck.pop(), game.deck.pop(), game.deck.pop()];
-        p.isFolded = false; p.isBlind = true; p.chips -= 50000; game.pot += 50000;
-        if (!p.isBot) updatePlayerChips(p.name, p.chips);
+        p.isBlind = true;
+        
+        // চিপস চেক: যদি ৫০,০০০ এর কম থাকে তবে সে ফোল্ড হয়ে যাবে
+        if (p.chips < 50000) {
+          p.isFolded = true;
+        } else {
+          p.isFolded = false;
+          p.chips -= 50000; 
+          game.pot += 50000;
+          if (!p.isBot) updatePlayerChips(p.name, p.chips);
+        }
       });
-      game.currentTurn = 0; emitGameState(rid);
+      
+      // যদি পর্যাপ্ত প্লেয়ার না থাকে তবে গেম বন্ধ
+      const active = game.players.filter((p: any) => !p.isFolded);
+      if (active.length < 2) {
+        game.gameStarted = false;
+        io.to(rid).emit("adminMessage", "❌ Not enough players with chips to start!");
+        emitGameState(rid);
+        return;
+      }
+
+      game.currentTurn = 0;
+      while (game.players[game.currentTurn].isFolded) {
+        game.currentTurn = (game.currentTurn + 1) % game.players.length;
+      }
+      
+      emitGameState(rid);
       startTurnTimer(rid);
       if (game.players[game.currentTurn].isBot) handleBotTurn(rid);
     }
