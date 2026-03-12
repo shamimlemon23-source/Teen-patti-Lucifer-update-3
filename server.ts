@@ -33,18 +33,16 @@ interface Card { suit: Suit; rank: Rank; }
 async function startServer() {
   const app = express();
   const httpServer = createServer(app);
-  
-  // --- Socket.IO Configuration (Timeout Fixes) ---
   const io = new Server(httpServer, { 
     cors: { origin: "*" },
-    pingTimeout: 120000, 
+    pingTimeout: 120000,
     pingInterval: 30000,
     connectTimeout: 60000,
     allowEIO3: true,
     transports: ['polling', 'websocket']
   });
-  
   const PORT = 3000;
+
   const rooms: any = {};
   const turnTimers: any = {};
   const sideShowRequests: any = {};
@@ -63,6 +61,7 @@ async function startServer() {
     else if (ranks[0] - ranks[1] === 1 && ranks[1] - ranks[2] === 1) isStraight = true;
     const isTrail = ranks[0] === ranks[1] && ranks[1] === ranks[2];
     const isPair = ranks[0] === ranks[1] || ranks[1] === ranks[2] || ranks[0] === ranks[2];
+
     if (isTrail) return 6000000 + ranks[0];
     if (isFlush && isStraight) return 5000000 + (ranks[0] === 14 && ranks[1] === 3 ? 3 : ranks[0]);
     if (isStraight) return 4000000 + (ranks[0] === 14 && ranks[1] === 3 ? 3 : ranks[0]);
@@ -268,6 +267,21 @@ async function startServer() {
       if (!game) return;
       const player = game.players[game.currentTurn];
       if (!player || player.id !== socket.id) return;
+
+      if (action === "show") {
+        const active = game.players.filter((p: any) => !p.isFolded);
+        if (active.length === 2) {
+          const bet = player.isBlind ? game.lastBet : game.lastBet * 2;
+          if (player.chips >= bet) {
+            player.chips -= bet;
+            game.pot += bet;
+            updatePlayerChips(player.name, player.chips);
+            resolveShowdown(rid);
+            return;
+          }
+        }
+      }
+
       if (action === "fold") player.isFolded = true;
       else if (action === "chaal") {
         const bet = player.isBlind ? game.lastBet : game.lastBet * 2;
