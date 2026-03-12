@@ -37,20 +37,22 @@ const CardComponent = ({ card, hidden, index }: { card: Card; hidden: boolean; i
     <motion.div
       initial={{ scale: 0, y: -50, rotate: 180 }}
       animate={{ scale: 1, y: 0, rotate: tilt }}
-      className={`relative w-10 h-14 md:w-16 md:h-22 rounded-lg shadow-2xl border-2 flex flex-col items-center justify-center transition-all duration-300 ${hidden ? 'bg-zinc-900 border-red-900/50' : 'bg-zinc-50 border-zinc-200 shadow-[0_0_15px_rgba(255,255,255,0.2)]'}`}
+      className={`relative w-8 h-12 md:w-20 md:h-28 rounded-md md:rounded-lg shadow-2xl border flex flex-col items-center justify-center transition-all duration-300 ${hidden ? 'bg-zinc-900 border-red-900/50' : 'bg-zinc-50 border-zinc-200 shadow-[0_0_15px_rgba(255,255,255,0.2)]'}`}
     >
       {hidden ? (
-        <div className="w-full h-full flex items-center justify-center bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-red-800 via-red-950 to-black rounded-lg border border-red-500/30 overflow-hidden relative">
+        <div className="w-full h-full flex items-center justify-center bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-red-800 via-red-950 to-black rounded-md md:rounded-lg border border-red-500/30 overflow-hidden relative">
           <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '10px 10px' }}></div>
-          <div className="w-8 h-10 border-2 border-red-500/40 rounded-md flex items-center justify-center rotate-45">
-            <div className="text-red-500/60 font-black text-xl -rotate-45">L</div>
+          <div className="w-6 h-9 border border-red-500/40 rounded-sm flex items-center justify-center rotate-45 shadow-[0_0_15px_rgba(220,38,38,0.3)]">
+            <div className="text-red-500/60 font-black text-sm -rotate-45 tracking-tighter">L</div>
           </div>
+          <div className="absolute top-0.5 left-0.5 text-[4px] text-red-500/40 font-bold uppercase">Lucifer</div>
+          <div className="absolute bottom-0.5 right-0.5 text-[4px] text-red-500/40 font-bold uppercase rotate-180">Lucifer</div>
         </div>
       ) : (
         <>
-          <div className={`absolute top-0.5 left-1 font-black text-[10px] md:text-sm leading-none ${SUIT_COLORS[card.suit]}`}>{card.rank}</div>
-          <div className={`text-xl md:text-3xl ${SUIT_COLORS[card.suit]}`}>{SUIT_SYMBOLS[card.suit]}</div>
-          <div className={`absolute bottom-0.5 right-1 font-black text-[10px] md:text-sm leading-none rotate-180 ${SUIT_COLORS[card.suit]}`}>{card.rank}</div>
+          <div className={`absolute top-0.5 left-0.5 font-black text-[8px] md:text-lg leading-none ${SUIT_COLORS[card.suit]}`}>{card.rank}</div>
+          <div className={`text-sm md:text-4xl drop-shadow-sm ${SUIT_COLORS[card.suit]}`}>{SUIT_SYMBOLS[card.suit]}</div>
+          <div className={`absolute bottom-0.5 right-0.5 font-black text-[8px] md:text-lg leading-none rotate-180 ${SUIT_COLORS[card.suit]}`}>{card.rank}</div>
         </>
       )}
     </motion.div>
@@ -203,29 +205,31 @@ export default function App() {
           </div>
 
           {rotatedPlayers.map((player, idx) => {
-            const originalIdx = gameState?.players.findIndex(p => p.name === player.name);
+            const originalIdx = gameState?.players.findIndex(p => p.id === player.id);
             const angle = (idx / rotatedPlayers.length) * 2 * Math.PI + Math.PI / 2;
             const isMobile = window.innerWidth < 768;
-            const x = Math.cos(angle) * (isMobile ? 42 : 38);
-            const y = Math.sin(angle) * (isMobile ? 30 : 32);
+            const radiusX = isMobile ? 44 : 38;
+            const radiusY = isMobile ? 32 : 32;
+            const x = Math.cos(angle) * radiusX;
+            const y = Math.sin(angle) * radiusY;
             const isCurrent = gameState?.currentTurn === originalIdx;
             const isMe = player.name === name;
             const isTopHalf = y < -5; 
 
             return (
-              <motion.div key={player.name} style={{ left: `${50 + x}%`, top: `${50 + y}%` }} className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-1 md:gap-3 z-30">
-                {!isTopHalf && <div className="flex -space-x-6 md:-space-x-8 mb-1 scale-[0.8] md:scale-[1.1] origin-bottom">{player.hand.map((card, cIdx) => <CardComponent key={cIdx} card={card} hidden={isMe ? player.isBlind : !gameState?.winner} index={cIdx} />)}</div>}
-                <div className={`relative flex flex-col items-center ${player.isFolded ? 'opacity-40' : ''} scale-[0.8] md:scale-[1.1]`}>
+              <motion.div key={player.id} style={{ left: `${50 + x}%`, top: `${50 + y}%` }} className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-1 md:gap-3 z-30">
+                {!isTopHalf && <div className="flex -space-x-4 md:-space-x-8 mb-1 scale-[0.7] md:scale-[1.1] origin-bottom">{player.hand.map((card, cIdx) => <CardComponent key={cIdx} card={card} hidden={isMe ? player.isBlind : !gameState?.winner} index={cIdx} />)}</div>}
+                <div className={`relative flex flex-col items-center ${player.isFolded ? 'opacity-40' : ''} scale-[0.7] md:scale-[1.1]`}>
                   <div className={`w-8 h-8 md:w-14 md:h-14 rounded-lg md:rounded-2xl border-2 flex items-center justify-center transition-all duration-500 relative ${isCurrent ? 'border-red-500 shadow-[0_0_20px_rgba(220,38,38,0.6)] scale-110 bg-red-500/30' : 'border-white/10 bg-black/60'}`}>
                     <UserIcon className={`w-4 h-4 md:w-8 md:h-8 ${isCurrent ? 'text-red-400' : 'text-white/40'}`} />
                     {isMe && <div className="absolute -top-1 -right-1 bg-yellow-500 text-black text-[5px] md:text-[8px] font-black px-1 rounded-sm z-10">VIP</div>}
                   </div>
-                  <div className="mt-1 bg-black/90 backdrop-blur-xl px-2 md:px-5 py-1 rounded-full border border-white/10 flex flex-col items-center min-w-[60px] md:min-w-[120px] shadow-2xl">
-                    <span className="text-[6px] md:text-xs font-black truncate max-w-[50px] md:max-w-[100px] text-white/90">{player.name} {isMe && "(You)"}</span>
-                    <div className="flex items-center gap-1 text-[7px] md:text-xs font-black text-yellow-500"><Coins className="w-2 h-2 md:w-4 md:h-4" />{player.chips === -1 ? "???" : player.chips.toLocaleString()}</div>
+                  <div className="mt-1 bg-black/90 backdrop-blur-xl px-2 md:px-5 py-1 rounded-full border border-white/10 flex flex-col items-center min-w-[50px] md:min-w-[120px] shadow-2xl">
+                    <span className="text-[5px] md:text-xs font-black truncate max-w-[40px] md:max-w-[100px] text-white/90">{player.name} {isMe && "(You)"}</span>
+                    <div className="flex items-center gap-1 text-[6px] md:text-xs font-black text-yellow-500"><Coins className="w-2 h-2 md:w-4 md:h-4" />{player.chips === -1 ? "???" : player.chips.toLocaleString()}</div>
                   </div>
                 </div>
-                {isTopHalf && <div className="flex -space-x-6 md:-space-x-8 mt-1 scale-[0.8] md:scale-[1.1] origin-top">{player.hand.map((card, cIdx) => <CardComponent key={cIdx} card={card} hidden={isMe ? player.isBlind : !gameState?.winner} index={cIdx} />)}</div>}
+                {isTopHalf && <div className="flex -space-x-4 md:-space-x-8 mt-1 scale-[0.7] md:scale-[1.1] origin-top">{player.hand.map((card, cIdx) => <CardComponent key={cIdx} card={card} hidden={isMe ? player.isBlind : !gameState?.winner} index={cIdx} />)}</div>}
               </motion.div>
             );
           })}
