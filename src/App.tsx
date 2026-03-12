@@ -37,20 +37,20 @@ const CardComponent = ({ card, hidden, index }: { card: Card; hidden: boolean; i
     <motion.div
       initial={{ scale: 0, y: -50, rotate: 180 }}
       animate={{ scale: 1, y: 0, rotate: tilt }}
-      className={`relative w-12 h-18 md:w-20 md:h-28 rounded-lg shadow-2xl border-2 flex flex-col items-center justify-center transition-all duration-300 ${hidden ? 'bg-zinc-900 border-red-900/50' : 'bg-zinc-50 border-zinc-200 shadow-[0_0_15px_rgba(255,255,255,0.2)]'}`}
+      className={`relative w-10 h-14 md:w-16 md:h-22 rounded-lg shadow-2xl border-2 flex flex-col items-center justify-center transition-all duration-300 ${hidden ? 'bg-zinc-900 border-red-900/50' : 'bg-zinc-50 border-zinc-200 shadow-[0_0_15px_rgba(255,255,255,0.2)]'}`}
     >
       {hidden ? (
         <div className="w-full h-full flex items-center justify-center bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-red-800 via-red-950 to-black rounded-lg border border-red-500/30 overflow-hidden relative">
           <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)', backgroundSize: '10px 10px' }}></div>
-          <div className="w-10 h-14 border-2 border-red-500/40 rounded-md flex items-center justify-center rotate-45">
-            <div className="text-red-500/60 font-black text-2xl -rotate-45">L</div>
+          <div className="w-8 h-10 border-2 border-red-500/40 rounded-md flex items-center justify-center rotate-45">
+            <div className="text-red-500/60 font-black text-xl -rotate-45">L</div>
           </div>
         </div>
       ) : (
         <>
-          <div className={`absolute top-0.5 left-1 font-black text-sm md:text-lg leading-none ${SUIT_COLORS[card.suit]}`}>{card.rank}</div>
-          <div className={`text-2xl md:text-4xl ${SUIT_COLORS[card.suit]}`}>{SUIT_SYMBOLS[card.suit]}</div>
-          <div className={`absolute bottom-0.5 right-1 font-black text-sm md:text-lg leading-none rotate-180 ${SUIT_COLORS[card.suit]}`}>{card.rank}</div>
+          <div className={`absolute top-0.5 left-1 font-black text-[10px] md:text-sm leading-none ${SUIT_COLORS[card.suit]}`}>{card.rank}</div>
+          <div className={`text-xl md:text-3xl ${SUIT_COLORS[card.suit]}`}>{SUIT_SYMBOLS[card.suit]}</div>
+          <div className={`absolute bottom-0.5 right-1 font-black text-[10px] md:text-sm leading-none rotate-180 ${SUIT_COLORS[card.suit]}`}>{card.rank}</div>
         </>
       )}
     </motion.div>
@@ -64,8 +64,6 @@ export default function App() {
   const [roomId, setRoomId] = useState('main-table');
   const [joined, setJoined] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
-  const [showAdminPanel, setShowAdminPanel] = useState(false);
-  const [adminStats, setAdminStats] = useState<any[]>([]);
   const [showSplash, setShowSplash] = useState(true);
   const [sideShowPrompt, setSideShowPrompt] = useState<{ fromName: string } | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -82,10 +80,9 @@ export default function App() {
     newSocket.on('connect_error', () => setIsConnected(false));
     newSocket.on('disconnect', () => setIsConnected(false));
     newSocket.on('gameState', (state: GameState) => { setGameState(state); if (state.winner) confetti({ particleCount: 150, spread: 70 }); });
-    newSocket.on('adminStats', (stats: any[]) => setAdminStats(stats));
     newSocket.on('sideShowPrompt', (data: { fromName: string }) => setSideShowPrompt(data));
     return () => { newSocket.close(); };
-  }, []);
+  }, [name, roomId]);
 
   useEffect(() => {
     const handleFullscreenChange = () => setIsFullscreen(!!document.fullscreenElement);
@@ -100,10 +97,7 @@ export default function App() {
 
   const joinRoom = () => { if (socket && name) { socket.emit('joinRoom', { roomId, name }); setJoined(true); } };
   const startGame = () => socket?.emit('startGame', roomId);
-  
-  const takeAction = (action: string, amount?: number) => {
-    socket?.emit('action', { roomId, action, amount });
-  };
+  const takeAction = (action: string, amount?: number) => socket?.emit('action', { roomId, action, amount });
 
   const handleRaise = () => {
     const amount = prompt("Enter Raise Amount:", "1000000");
@@ -116,15 +110,19 @@ export default function App() {
   const rotatedPlayers = useMemo(() => {
     if (!gameState) return [];
     const players = [...gameState.players];
-    const myIndex = players.findIndex(p => p.id === socket?.id);
+    const myIndex = players.findIndex(p => p.name === name);
     if (myIndex === -1) return players;
     const rotated = [];
     for (let i = 0; i < players.length; i++) rotated.push(players[(myIndex + i) % players.length]);
     return rotated;
-  }, [gameState, socket]);
+  }, [gameState, name]);
 
-  const currentPlayer = useMemo(() => gameState?.players.find(p => p.id === socket?.id), [gameState, socket]);
-  const isMyTurn = useMemo(() => gameState?.players[gameState.currentTurn]?.id === socket?.id, [gameState, socket]);
+  const currentPlayer = useMemo(() => gameState?.players.find(p => p.name === name), [gameState, name]);
+  const isMyTurn = useMemo(() => gameState?.players[gameState.currentTurn]?.name === name, [gameState, name]);
+  
+  const activeCount = useMemo(() => gameState?.players.filter(p => !p.isFolded).length || 0, [gameState]);
+  const canShow = useMemo(() => isMyTurn && activeCount === 2, [isMyTurn, activeCount]);
+
   const canSideShow = useMemo(() => {
     if (!gameState || !isMyTurn || !currentPlayer || currentPlayer.isBlind) return false;
     let prevIdx = (gameState.currentTurn - 1 + gameState.players.length) % gameState.players.length;
@@ -190,7 +188,7 @@ export default function App() {
         <div className="relative w-full h-full bg-emerald-950 flex items-center justify-center overflow-hidden">
           <div className="absolute inset-0 z-0"><img src={ASSETS.TABLE_BG} className="w-full h-full object-cover opacity-40" referrerPolicy="no-referrer" /></div>
           <div className="absolute top-[8%] left-1/2 -translate-x-1/2 z-10 flex flex-col items-center">
-            <div className="w-20 h-20 md:w-32 md:h-32"><img src={ASSETS.DEALER} className="w-full h-full object-contain" referrerPolicy="no-referrer" /></div>
+            <div className="w-16 h-16 md:w-32 md:h-32"><img src={ASSETS.DEALER} className="w-full h-full object-contain" referrerPolicy="no-referrer" /></div>
             <div className="bg-black/60 backdrop-blur-md px-3 py-1 rounded-full border border-white/10 -mt-2"><span className="text-[8px] md:text-xs font-black text-white/80 uppercase tracking-widest">Dealer</span></div>
           </div>
 
@@ -205,17 +203,17 @@ export default function App() {
           </div>
 
           {rotatedPlayers.map((player, idx) => {
-            const originalIdx = gameState?.players.findIndex(p => p.id === player.id);
+            const originalIdx = gameState?.players.findIndex(p => p.name === player.name);
             const angle = (idx / rotatedPlayers.length) * 2 * Math.PI + Math.PI / 2;
             const isMobile = window.innerWidth < 768;
             const x = Math.cos(angle) * (isMobile ? 42 : 38);
             const y = Math.sin(angle) * (isMobile ? 30 : 32);
             const isCurrent = gameState?.currentTurn === originalIdx;
-            const isMe = player.id === socket?.id;
+            const isMe = player.name === name;
             const isTopHalf = y < -5; 
 
             return (
-              <motion.div key={player.id} style={{ left: `${50 + x}%`, top: `${50 + y}%` }} className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-1 md:gap-3 z-30">
+              <motion.div key={player.name} style={{ left: `${50 + x}%`, top: `${50 + y}%` }} className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-1 md:gap-3 z-30">
                 {!isTopHalf && <div className="flex -space-x-6 md:-space-x-8 mb-1 scale-[0.8] md:scale-[1.1] origin-bottom">{player.hand.map((card, cIdx) => <CardComponent key={cIdx} card={card} hidden={isMe ? player.isBlind : !gameState?.winner} index={cIdx} />)}</div>}
                 <div className={`relative flex flex-col items-center ${player.isFolded ? 'opacity-40' : ''} scale-[0.8] md:scale-[1.1]`}>
                   <div className={`w-8 h-8 md:w-14 md:h-14 rounded-lg md:rounded-2xl border-2 flex items-center justify-center transition-all duration-500 relative ${isCurrent ? 'border-red-500 shadow-[0_0_20px_rgba(220,38,38,0.6)] scale-110 bg-red-500/30' : 'border-white/10 bg-black/60'}`}>
@@ -248,6 +246,7 @@ export default function App() {
                 <button onClick={() => takeAction('fold')} className="bg-zinc-900/90 border border-white/10 text-white font-black px-2 md:px-5 py-2 md:py-3 rounded-lg md:rounded-xl text-[8px] md:text-xs uppercase tracking-widest hover:bg-zinc-800">Fold</button>
                 {currentPlayer?.isBlind && <button onClick={() => takeAction('see')} className="bg-zinc-900/90 border border-white/10 text-white font-black px-2 md:px-5 py-2 md:py-3 rounded-lg md:rounded-xl flex items-center gap-1 text-[8px] md:text-xs uppercase tracking-widest hover:bg-zinc-800"><Eye className="w-3 h-3 md:w-5 md:h-5 text-red-500" />See</button>}
                 {canSideShow && <button onClick={handleSideShow} className="bg-zinc-900/90 border border-white/10 text-white font-black px-2 md:px-5 py-2 md:py-3 rounded-lg md:rounded-xl text-[8px] md:text-xs uppercase tracking-widest hover:bg-zinc-800">Side</button>}
+                {canShow && <button onClick={() => takeAction('show')} className="bg-emerald-600 border border-emerald-500 text-white font-black px-2 md:px-5 py-2 md:py-3 rounded-lg md:rounded-xl text-[8px] md:text-xs uppercase tracking-widest hover:bg-emerald-500">Show</button>}
                 <div className="flex items-stretch gap-0.5 shadow-2xl">
                   <button onClick={() => takeAction('chaal')} className="bg-red-600 text-white font-black px-3 md:px-8 py-2 md:py-3 rounded-l-lg md:rounded-l-xl shadow-[0_0_20px_rgba(220,38,38,0.4)] flex flex-col items-center justify-center uppercase tracking-widest min-w-[70px] md:min-w-[120px] hover:bg-red-500">
                     <span className="text-[5px] md:text-[9px] font-black text-white/60 leading-none mb-0.5">CHAAL</span>
