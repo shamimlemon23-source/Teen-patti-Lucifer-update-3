@@ -9,8 +9,10 @@ import fs from 'fs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// --- Database Setup ---
 const db = new Database('game.db');
 db.exec(`CREATE TABLE IF NOT EXISTS players (name TEXT PRIMARY KEY, chips BIGINT DEFAULT 50000000)`);
+db.prepare(`UPDATE players SET chips = 50000000`).run();
 
 const getPlayerChips = (name: string): number => {
   const row = db.prepare('SELECT chips FROM players WHERE name = ?').get(name) as { chips: number } | undefined;
@@ -31,15 +33,21 @@ interface Card { suit: Suit; rank: Rank; }
 async function startServer() {
   const app = express();
   const httpServer = createServer(app);
+  
+  // --- Socket.IO Configuration (Timeout Fixes) ---
   const io = new Server(httpServer, { 
     cors: { origin: "*" },
-    pingTimeout: 60000,
-    pingInterval: 25000
+    pingTimeout: 120000, 
+    pingInterval: 30000,
+    connectTimeout: 60000,
+    allowEIO3: true,
+    transports: ['polling', 'websocket']
   });
+  
   const PORT = 3000;
-
   const rooms: any = {};
   const turnTimers: any = {};
+  const sideShowRequests: any = {};
   const autoStartTimers: any = {};
 
   const RANK_VALUE: Record<Rank, number> = {
@@ -55,7 +63,6 @@ async function startServer() {
     else if (ranks[0] - ranks[1] === 1 && ranks[1] - ranks[2] === 1) isStraight = true;
     const isTrail = ranks[0] === ranks[1] && ranks[1] === ranks[2];
     const isPair = ranks[0] === ranks[1] || ranks[1] === ranks[2] || ranks[0] === ranks[2];
-
     if (isTrail) return 6000000 + ranks[0];
     if (isFlush && isStraight) return 5000000 + (ranks[0] === 14 && ranks[1] === 3 ? 3 : ranks[0]);
     if (isStraight) return 4000000 + (ranks[0] === 14 && ranks[1] === 3 ? 3 : ranks[0]);
@@ -76,7 +83,9 @@ async function startServer() {
       for (const socketId of socketsInRoom) {
         const socket = io.sockets.sockets.get(socketId);
         if (socket) {
-          const stateToSend = JSON.parse(JSON.stringify(game));
+          const stateToSend = JSON.parse(JSON.stringify(game, (key, value) =>
+            typeof value === 'bigint' ? value.toString() : value
+          ));
           stateToSend.players.forEach((p: any) => {
             if (p.id !== socketId && !p.isBot) p.chips = -1;
           });
@@ -112,12 +121,15 @@ async function startServer() {
     if (turnTimers[rid]) clearTimeout(turnTimers[rid]);
     const game = rooms[rid];
     if (!game || !game.gameStarted) return;
+    game.turnStartTime = Date.now();
+    game.turnDuration = 30000;
     turnTimers[rid] = setTimeout(() => {
       const g = rooms[rid];
       if (!g || !g.gameStarted) return;
       const player = g.players[g.currentTurn];
       if (player) {
         player.isFolded = true;
+        io.to(rid).emit("adminMessage", `⏰ ${player.name} timed out and folded!`);
         nextTurn(rid);
       }
     }, 30000);
@@ -129,7 +141,8 @@ async function startServer() {
     let active = game.players.filter((p: any) => !p.isFolded);
     if (active.length === 1) {
       game.winner = active[0].name;
-      active[0].chips += game.pot;
+      game.winnerChips = game.pot;
+      active[0].chips = Number(active[0].chips) + game.pot;
       if (!active[0].isBot) updatePlayerChips(active[0].name, active[0].chips);
       game.gameStarted = false;
       if (turnTimers[rid]) clearTimeout(turnTimers[rid]);
@@ -141,22 +154,50 @@ async function startServer() {
     do { game.currentTurn = (game.currentTurn + 1) % game.players.length; } 
     while (game.players[game.currentTurn].isFolded);
     if (game.currentTurn <= oldTurn) game.roundCount++;
-    if (game.roundCount >= 5) return resolveShowdown(rid);
+    if (game.roundCount >= 5) {
+      game.players.forEach((p: any) => { if (!p.isFolded) p.isBlind = false; });
+      return resolveShowdown(rid);
+    }
     emitGameState(rid);
     startTurnTimer(rid);
     if (game.players[game.currentTurn].isBot) handleBotTurn(rid);
   }
 
+  function createDeck(): Card[] {
+    const suits: Suit[] = ['hearts', 'diamonds', 'clubs', 'spades'];
+    const ranks: Rank[] = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+    const deck: Card[] = [];
+    for (const suit of suits) for (const rank of ranks) deck.push({ suit, rank });
+    return deck.sort(() => Math.random() - 0.5);
+  }
+
   function handleBotTurn(rid: string) {
     const game = rooms[rid];
     if (!game || !game.gameStarted) return;
+    const currentPlayer = game.players[game.currentTurn];
+    if (!currentPlayer || !currentPlayer.isBot || currentPlayer.isFolded) return;
     setTimeout(() => {
       if (!game.gameStarted) return;
-      const currentPlayer = game.players[game.currentTurn];
-      if (!currentPlayer || !currentPlayer.isBot) return;
-      const bet = currentPlayer.isBlind ? game.lastBet : game.lastBet * 2;
-      if (currentPlayer.chips < bet) currentPlayer.isFolded = true;
-      else { currentPlayer.chips -= bet; game.pot += bet; }
+      const random = Math.random();
+      if (currentPlayer.isBlind && random < 0.4) {
+        currentPlayer.isBlind = false;
+        emitGameState(rid);
+        return handleBotTurn(rid);
+      }
+      let action = "chaal";
+      if (random < 0.1) action = "fold";
+      else if (random > 0.8) action = "raise";
+      if (action === "fold") currentPlayer.isFolded = true;
+      else if (action === "chaal") {
+        const bet = currentPlayer.isBlind ? game.lastBet : game.lastBet * 2;
+        if (currentPlayer.chips < bet) currentPlayer.isFolded = true;
+        else { currentPlayer.chips -= bet; game.pot += bet; }
+      } else if (action === "raise") {
+        game.lastBet += 100000;
+        const bet = currentPlayer.isBlind ? game.lastBet : game.lastBet * 2;
+        if (currentPlayer.chips < bet) currentPlayer.isFolded = true;
+        else { currentPlayer.chips -= bet; game.pot += bet; }
+      }
       nextTurn(rid);
     }, 2000);
   }
@@ -165,12 +206,14 @@ async function startServer() {
     const game = rooms[rid];
     if (!game || game.gameStarted) return;
     if (game.players.length >= 2) {
-      game.autoStartIn = 5;
       if (autoStartTimers[rid]) clearInterval(autoStartTimers[rid]);
+      game.autoStartIn = 5;
       autoStartTimers[rid] = setInterval(() => {
         game.autoStartIn--;
-        if (game.autoStartIn <= 0) { clearInterval(autoStartTimers[rid]); startGame(rid); }
-        else emitGameState(rid);
+        if (game.autoStartIn <= 0) {
+          clearInterval(autoStartTimers[rid]);
+          startGame(rid);
+        } else emitGameState(rid);
       }, 1000);
     }
   }
@@ -178,14 +221,9 @@ async function startServer() {
   function startGame(rid: string) {
     const game = rooms[rid];
     if (game && game.players.length >= 2) {
-      game.gameStarted = true; game.pot = 0; game.lastBet = 50000; game.winner = null; game.roundCount = 0;
-      const suits: Suit[] = ['hearts', 'diamonds', 'clubs', 'spades'];
-      const ranks: Rank[] = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
-      const deck: Card[] = [];
-      for (const suit of suits) for (const rank of ranks) deck.push({ suit, rank });
-      const shuffled = deck.sort(() => Math.random() - 0.5);
+      game.gameStarted = true; game.deck = createDeck(); game.pot = 0; game.lastBet = 50000; game.winner = null; game.roundCount = 0; game.autoStartIn = 0;
       game.players.forEach((p: any) => {
-        p.hand = [shuffled.pop(), shuffled.pop(), shuffled.pop()];
+        p.hand = [game.deck.pop(), game.deck.pop(), game.deck.pop()];
         p.isFolded = false; p.isBlind = true; p.chips -= 50000; game.pot += 50000;
         if (!p.isBot) updatePlayerChips(p.name, p.chips);
       });
@@ -198,9 +236,26 @@ async function startServer() {
   io.on("connection", (socket) => {
     socket.on("joinRoom", ({ roomId, name }) => {
       let rid = (roomId || "main-table").trim().toLowerCase();
-      if (!rooms[rid]) rooms[rid] = { players: [{ id: "bot1", name: "😈 Lucifer Bot 1", chips: 500000000, hand: [], isFolded: false, isBlind: true, isBot: true }], pot: 0, currentTurn: 0, lastBet: 50000, gameStarted: false, winner: null, roundCount: 0 };
+      if (!rooms[rid]) {
+        rooms[rid] = { 
+          players: [
+            { id: "bot1", name: "😈 Lucifer Bot 1", chips: 500000000, hand: [], isFolded: false, isBlind: true, currentBet: 0, isBot: true },
+            { id: "bot2", name: "🔥 Lucifer Bot 2", chips: 500000000, hand: [], isFolded: false, isBlind: true, currentBet: 0, isBot: true }
+          ], 
+          pot: 0, currentTurn: 0, lastBet: 50000, gameStarted: false, winner: null, deck: [], roundCount: 0 
+        };
+      }
+      const game = rooms[rid];
+      const playerName = (name || "Player").trim();
+      const existingPlayer = game.players.find((p: any) => p.name === playerName);
+      if (existingPlayer && !existingPlayer.isBot) {
+        existingPlayer.id = socket.id;
+        existingPlayer.chips = getPlayerChips(playerName);
+        socket.join(rid);
+        return emitGameState(rid);
+      }
       socket.join(rid);
-      rooms[rid].players.push({ id: socket.id, name: name || "Player", chips: getPlayerChips(name), hand: [], isFolded: false, isBlind: true, isBot: false });
+      game.players.push({ id: socket.id, name: playerName, chips: getPlayerChips(playerName), hand: [], isFolded: false, isBlind: true, currentBet: 0, isBot: false });
       emitGameState(rid);
       checkAutoStart(rid);
     });
@@ -216,28 +271,114 @@ async function startServer() {
       if (action === "fold") player.isFolded = true;
       else if (action === "chaal") {
         const bet = player.isBlind ? game.lastBet : game.lastBet * 2;
-        player.chips -= bet; game.pot += bet;
+        if (player.chips < bet) player.isFolded = true;
+        else { player.chips -= bet; game.pot += bet; }
       } else if (action === "raise") {
-        game.lastBet += (amount || 100000);
-        const bet = player.isBlind ? game.lastBet : game.lastBet * 2;
+        const raiseAmount = amount ? parseInt(amount) : 100000;
+        const newLastBet = game.lastBet + raiseAmount;
+        const bet = player.isBlind ? newLastBet : newLastBet * 2;
+        if (player.chips < bet) return;
+        game.lastBet = newLastBet;
         player.chips -= bet; game.pot += bet;
       } else if (action === "see") { player.isBlind = false; return emitGameState(rid); }
       if (!player.isBot) updatePlayerChips(player.name, player.chips);
       nextTurn(rid);
     });
 
+    socket.on("sideShowRequest", (roomId) => {
+      const rid = roomId.trim().toLowerCase();
+      const game = rooms[rid];
+      if (!game || !game.gameStarted) return;
+      const currentPlayer = game.players[game.currentTurn];
+      if (!currentPlayer || currentPlayer.id !== socket.id || currentPlayer.isBlind) return;
+      let prevIdx = (game.currentTurn - 1 + game.players.length) % game.players.length;
+      while (game.players[prevIdx].isFolded) prevIdx = (prevIdx - 1 + game.players.length) % game.players.length;
+      const prevPlayer = game.players[prevIdx];
+      if (prevPlayer.isBlind) return;
+      const bet = game.lastBet * 2;
+      if (currentPlayer.chips < bet) return;
+      currentPlayer.chips -= bet; game.pot += bet;
+      updatePlayerChips(currentPlayer.name, currentPlayer.chips);
+      if (prevPlayer.isBot) {
+        const score1 = getHandScore(currentPlayer.hand);
+        const score2 = getHandScore(prevPlayer.hand);
+        if (score1 >= score2) prevPlayer.isFolded = true;
+        else currentPlayer.isFolded = true;
+        emitGameState(rid);
+        nextTurn(rid);
+      } else {
+        sideShowRequests[rid] = { from: currentPlayer.id, to: prevPlayer.id };
+        io.to(prevPlayer.id).emit("sideShowPrompt", { fromName: currentPlayer.name });
+        emitGameState(rid);
+      }
+    });
+
+    socket.on("sideShowResponse", ({ roomId, accepted }) => {
+      const rid = roomId.trim().toLowerCase();
+      const game = rooms[rid];
+      const request = sideShowRequests[rid];
+      if (!game || !request) return;
+      const fromPlayer = game.players.find((p: any) => p.id === request.from);
+      const toPlayer = game.players.find((p: any) => p.id === request.to);
+      if (accepted && fromPlayer && toPlayer) {
+        const score1 = getHandScore(fromPlayer.hand);
+        const score2 = getHandScore(toPlayer.hand);
+        if (score1 >= score2) toPlayer.isFolded = true;
+        else fromPlayer.isFolded = true;
+      }
+      delete sideShowRequests[rid];
+      nextTurn(rid);
+    });
+
     socket.on("disconnect", () => {
       Object.keys(rooms).forEach(rid => {
-        rooms[rid].players = rooms[rid].players.filter((p: any) => p.id !== socket.id || p.isBot);
-        emitGameState(rid);
+        const game = rooms[rid];
+        if (game) {
+          game.players = game.players.filter((p: any) => p.id !== socket.id || p.isBot);
+          emitGameState(rid);
+        }
       });
+    });
+
+    socket.on("getAdminStats", (adminName) => {
+      if (adminName?.trim().toLowerCase() === "admin") socket.emit("adminStats", db.prepare('SELECT name, chips FROM players ORDER BY chips DESC').all());
+    });
+
+    socket.on("resetAllChips", (adminName) => {
+      if (adminName?.trim().toLowerCase() !== "admin") return;
+      db.prepare('UPDATE players SET chips = 50000000').run();
+      Object.keys(rooms).forEach(rid => {
+        rooms[rid].players.forEach((p: any) => { p.chips = 50000000; });
+        io.to(rid).emit("gameState", rooms[rid]);
+      });
+      socket.emit("adminStats", db.prepare('SELECT name, chips FROM players ORDER BY chips DESC').all());
+    });
+
+    socket.on("addPlayerChips", ({ adminName, targetName, amount }) => {
+      if (adminName?.trim().toLowerCase() === "admin") {
+        const addAmount = parseInt(amount);
+        if (isNaN(addAmount)) return;
+        db.prepare('UPDATE players SET chips = chips + ? WHERE name = ?').run(addAmount, targetName);
+        Object.keys(rooms).forEach(rid => {
+          const p = rooms[rid].players.find((pl: any) => pl.name === targetName);
+          if (p) { p.chips += addAmount; io.to(rid).emit("gameState", rooms[rid]); }
+        });
+        socket.emit("adminStats", db.prepare('SELECT name, chips FROM players ORDER BY chips DESC').all());
+      }
     });
   });
 
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import('vite');
-    const vite = await createViteServer({ server: { middlewareMode: true }, appType: "spa" });
+    const vite = await createViteServer({ server: { middlewareMode: true, hmr: false }, appType: "spa" });
     app.use(vite.middlewares);
+    app.get("*", async (req, res, next) => {
+      try {
+        const template = fs.readFileSync(path.resolve(process.cwd(), "index.html"), "utf-8");
+        const html = await vite.transformIndexHtml(req.url, template);
+        res.status(200).set({ "Content-Type": "text/html" }).end(html);
+      } catch (e) { next(e); }
+    });
   } else {
     const distPath = path.resolve(process.cwd(), "dist");
     app.use(express.static(distPath));
