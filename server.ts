@@ -15,7 +15,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS players (name TEXT PRIMARY KEY, chips BIGINT
 
 const getPlayerChips = (name: string): number => {
   const row = db.prepare('SELECT chips FROM players WHERE name = ?').get(name) as { chips: number } | undefined;
-  if (row) return row.chips;
+  if (row) return Number(row.chips);
   const initialChips = 50000000; 
   db.prepare('INSERT INTO players (name, chips) VALUES (?, ?)').run(name, initialChips);
   return initialChips;
@@ -48,6 +48,7 @@ async function startServer() {
   };
 
   function getHandScore(hand: Card[]) {
+    if (!hand || hand.length < 3) return 0;
     const ranks = hand.map(c => RANK_VALUE[c.rank]).sort((a, b) => b - a);
     const suits = hand.map(c => c.suit);
     const isFlush = suits[0] === suits[1] && suits[1] === suits[2];
@@ -62,8 +63,8 @@ async function startServer() {
     if (isStraight) return 4000000 + (ranks[0] === 14 && ranks[1] === 3 ? 3 : ranks[0]);
     if (isFlush) return 3000000 + ranks[0] * 10000 + ranks[1] * 100 + ranks[2];
     if (isPair) {
-      const pairRank = ranks[0] === ranks[1] ? ranks[0] : ranks[1];
-      const kicker = ranks[0] === ranks[1] ? ranks[2] : (ranks[1] === ranks[2] ? ranks[0] : ranks[1]);
+      const pairRank = (ranks[0] === ranks[1]) ? ranks[0] : ranks[1];
+      const kicker = (ranks[0] === ranks[1]) ? ranks[2] : (ranks[1] === ranks[2] ? ranks[0] : ranks[1]);
       return 2000000 + pairRank * 100 + kicker;
     }
     return 1000000 + ranks[0] * 10000 + ranks[1] * 100 + ranks[2];
@@ -81,7 +82,9 @@ async function startServer() {
             typeof value === 'bigint' ? value.toString() : value
           ));
           stateToSend.players.forEach((p: any) => {
-            if (p.id !== socketId && !p.isBot) p.chips = -1;
+            if (p.id !== socketId && !p.isBot && !game.winner) {
+              p.chips = -1; // Hide other players' chips unless it's showdown
+            }
           });
           socket.emit("gameState", stateToSend);
         }
@@ -102,13 +105,13 @@ async function startServer() {
     const winner = game.players.find((p: any) => p.name === winnerName);
     if (winner) {
       game.winner = winner.name;
-      winner.chips += game.pot;
+      winner.chips = Number(winner.chips) + game.pot;
       if (!winner.isBot) updatePlayerChips(winner.name, winner.chips);
     }
     game.gameStarted = false;
     if (turnTimers[rid]) clearTimeout(turnTimers[rid]);
     emitGameState(rid);
-    setTimeout(() => checkAutoStart(rid), 3000);
+    setTimeout(() => checkAutoStart(rid), 5000);
   }
 
   function startTurnTimer(rid: string) {
@@ -140,14 +143,14 @@ async function startServer() {
       game.gameStarted = false;
       if (turnTimers[rid]) clearTimeout(turnTimers[rid]);
       emitGameState(rid);
-      setTimeout(() => checkAutoStart(rid), 3000);
+      setTimeout(() => checkAutoStart(rid), 5000);
       return;
     }
     const oldTurn = game.currentTurn;
     do { game.currentTurn = (game.currentTurn + 1) % game.players.length; } 
     while (game.players[game.currentTurn].isFolded);
     if (game.currentTurn <= oldTurn) game.roundCount++;
-    if (game.roundCount >= 5) return resolveShowdown(rid);
+    if (game.roundCount >= 10) return resolveShowdown(rid);
     emitGameState(rid);
     startTurnTimer(rid);
     if (game.players[game.currentTurn].isBot) handleBotTurn(rid);
@@ -169,14 +172,14 @@ async function startServer() {
     setTimeout(() => {
       if (!game.gameStarted) return;
       const random = Math.random();
-      if (currentPlayer.isBlind && random < 0.3) {
+      if (currentPlayer.isBlind && random < 0.4) {
         currentPlayer.isBlind = false;
         emitGameState(rid);
         return handleBotTurn(rid);
       }
       let action = "chaal";
       if (random < 0.1) action = "fold";
-      else if (random > 0.85) action = "raise";
+      else if (random > 0.9) action = "raise";
       if (action === "fold") currentPlayer.isFolded = true;
       else {
         const bet = currentPlayer.isBlind ? game.lastBet : game.lastBet * 2;
@@ -184,11 +187,11 @@ async function startServer() {
         else {
           if (action === "raise") game.lastBet += 100000;
           const finalBet = currentPlayer.isBlind ? game.lastBet : game.lastBet * 2;
-          currentPlayer.chips -= finalBet; game.pot += finalBet;
+          currentPlayer.chips = Number(currentPlayer.chips) - finalBet; game.pot += finalBet;
         }
       }
       nextTurn(rid);
-    }, 2000);
+    }, 2500);
   }
 
   function checkAutoStart(rid: string) {
@@ -196,7 +199,7 @@ async function startServer() {
     if (!game || game.gameStarted) return;
     if (game.players.length >= 2) {
       if (autoStartTimers[rid]) clearInterval(autoStartTimers[rid]);
-      game.autoStartIn = 5;
+      game.autoStartIn = 8;
       autoStartTimers[rid] = setInterval(() => {
         game.autoStartIn--;
         if (game.autoStartIn <= 0) {
@@ -213,7 +216,9 @@ async function startServer() {
       game.gameStarted = true; game.deck = createDeck(); game.pot = 0; game.lastBet = 50000; game.winner = null; game.roundCount = 0; game.autoStartIn = 0;
       game.players.forEach((p: any) => {
         p.hand = [game.deck.pop(), game.deck.pop(), game.deck.pop()];
-        p.isFolded = false; p.isBlind = true; p.chips -= 50000; game.pot += 50000;
+        p.isFolded = false; p.isBlind = true; 
+        const ante = 50000;
+        p.chips = Number(p.chips) - ante; game.pot += ante;
         if (!p.isBot) updatePlayerChips(p.name, p.chips);
       });
       game.currentTurn = 0; emitGameState(rid);
@@ -228,8 +233,8 @@ async function startServer() {
       if (!rooms[rid]) {
         rooms[rid] = { 
           players: [
-            { id: "bot1", name: "😈 Lucifer Bot 1", chips: 500000000, hand: [], isFolded: false, isBlind: true, isBot: true },
-            { id: "bot2", name: "🔥 Lucifer Bot 2", chips: 500000000, hand: [], isFolded: false, isBlind: true, isBot: true }
+            { id: "bot1", name: "😈 Lucifer Bot 1", chips: 1000000000, hand: [], isFolded: false, isBlind: true, isBot: true },
+            { id: "bot2", name: "🔥 Lucifer Bot 2", chips: 1000000000, hand: [], isFolded: false, isBlind: true, isBot: true }
           ], 
           pot: 0, currentTurn: 0, lastBet: 50000, gameStarted: false, winner: null, deck: [], roundCount: 0 
         };
@@ -264,7 +269,7 @@ async function startServer() {
         if (active.length === 2) {
           const bet = player.isBlind ? game.lastBet : game.lastBet * 2;
           if (player.chips >= bet) {
-            player.chips -= bet; game.pot += bet;
+            player.chips = Number(player.chips) - bet; game.pot += bet;
             updatePlayerChips(player.name, player.chips);
             resolveShowdown(rid);
             return;
@@ -279,7 +284,7 @@ async function startServer() {
           player.isFolded = true;
           socket.emit("adminMessage", "❌ Not enough chips!");
         } else {
-          player.chips -= bet; game.pot += bet;
+          player.chips = Number(player.chips) - bet; game.pot += bet;
         }
       } else if (action === "raise") {
         const raiseAmount = amount ? parseInt(amount) : 100000;
@@ -290,7 +295,7 @@ async function startServer() {
           return;
         } else {
           game.lastBet = newLastBet;
-          player.chips -= bet; game.pot += bet;
+          player.chips = Number(player.chips) - bet; game.pot += bet;
         }
       } else if (action === "see") {
         player.isBlind = false;
@@ -312,7 +317,7 @@ async function startServer() {
       if (prevPlayer.isBlind) return socket.emit("adminMessage", "❌ Cannot side show with blind!");
       const bet = game.lastBet * 2;
       if (currentPlayer.chips < bet) return socket.emit("adminMessage", "❌ Not enough chips!");
-      currentPlayer.chips -= bet; game.pot += bet;
+      currentPlayer.chips = Number(currentPlayer.chips) - bet; game.pot += bet;
       updatePlayerChips(currentPlayer.name, currentPlayer.chips);
       if (prevPlayer.isBot) {
         const s1 = getHandScore(currentPlayer.hand);
@@ -356,7 +361,7 @@ async function startServer() {
         emitGameState(rid);
       });
       socket.emit("adminStats", db.prepare('SELECT name, chips FROM players ORDER BY chips DESC').all());
-      socket.emit("adminMessage", "✅ All chips reset!");
+      socket.emit("adminMessage", "✅ All chips reset to 5 Crore!");
     });
 
     socket.on("resetPlayerChips", ({ adminName, targetName }) => {
@@ -369,7 +374,7 @@ async function startServer() {
         if (p) { p.chips = 50000000; emitGameState(rid); }
       });
       socket.emit("adminStats", db.prepare('SELECT name, chips FROM players ORDER BY chips DESC').all());
-      socket.emit("adminMessage", `✅ ${targetName} reset!`);
+      socket.emit("adminMessage", `✅ ${targetName} reset to 5 Crore!`);
     });
 
     socket.on("addPlayerChips", ({ adminName, targetName, amount }) => {
