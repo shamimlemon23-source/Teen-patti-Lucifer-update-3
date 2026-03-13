@@ -88,7 +88,7 @@ const CardComponent = ({ card, hidden, index }: CardComponentProps) => {
       initial={{ scale: 0, y: -50, rotate: 180, opacity: 0 }}
       animate={{ scale: 1, y: 0, rotate: tilt, opacity: 1 }}
       transition={{ delay: index * 0.1, type: 'spring', stiffness: 120, damping: 12 }}
-      className={`relative w-8 h-12 md:w-24 md:h-32 rounded-lg md:rounded-xl shadow-2xl border-2 flex flex-col items-center justify-center transition-all duration-300 ${hidden ? 'bg-zinc-900 border-red-900/50' : 'bg-white border-zinc-200 shadow-[0_0_20px_rgba(255,255,255,0.15)]'}`}
+      className={`relative w-12 h-18 md:w-24 md:h-32 rounded-lg md:rounded-xl shadow-2xl border-2 flex flex-col items-center justify-center transition-all duration-300 ${hidden ? 'bg-zinc-900 border-red-900/50' : 'bg-white border-zinc-200 shadow-[0_0_20px_rgba(255,255,255,0.15)]'}`}
     >
       {hidden ? (
         <div className="w-full h-full flex items-center justify-center bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-red-800 via-red-950 to-black rounded-lg md:rounded-xl border border-red-500/30 overflow-hidden relative">
@@ -131,11 +131,12 @@ export default function App() {
   const [manualAmount, setManualAmount] = useState('50000000');
   const [adminStats, setAdminStats] = useState<any[]>([]);
   const [adminMessage, setAdminMessage] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
   const [showSplash, setShowSplash] = useState(true);
   const [sideShowPrompt, setSideShowPrompt] = useState<{ fromName: string } | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  const isAdmin = useMemo(() => name.trim().toLowerCase() === 'admin', [name]);
+  const isAdmin = useMemo(() => name.trim() === 'LUCIFER_DEV_777', [name]);
 
   useEffect(() => {
     const timer = setTimeout(() => setShowSplash(false), 3000);
@@ -254,17 +255,28 @@ export default function App() {
   };
 
   const openAdminPanel = () => {
-    setShowAdminPanel(true);
-    socket?.emit('getAdminStats', name);
+    if (!adminPassword) {
+      const pass = prompt("Enter Admin Password:");
+      if (pass === "LUCIFER_PASS_999") {
+        setAdminPassword(pass);
+        setShowAdminPanel(true);
+        socket?.emit('getAdminStats', { adminName: name, adminPassword: pass });
+      } else {
+        alert("Incorrect Password!");
+      }
+    } else {
+      setShowAdminPanel(true);
+      socket?.emit('getAdminStats', { adminName: name, adminPassword });
+    }
   };
 
-  const refreshAdminStats = () => socket?.emit('getAdminStats', name);
-  const resetAllChips = () => { if (confirm("Reset ALL players?")) socket?.emit('resetAllChips', name); };
-  const resetPlayerChips = (targetName: string) => socket?.emit('resetPlayerChips', { adminName: name, targetName });
+  const refreshAdminStats = () => socket?.emit('getAdminStats', { adminName: name, adminPassword });
+  const resetAllChips = () => { if (confirm("Reset ALL players?")) socket?.emit('resetAllChips', { adminName: name, adminPassword }); };
+  const resetPlayerChips = (targetName: string) => socket?.emit('resetPlayerChips', { adminName: name, adminPassword, targetName });
   const addPlayerChips = (targetName: string, amount: string = "50000000") => {
     const customAmount = prompt(`Enter amount to add for ${targetName}:`, amount);
     if (customAmount && !isNaN(parseInt(customAmount))) {
-      socket?.emit('addPlayerChips', { adminName: name, targetName, amount: customAmount });
+      socket?.emit('addPlayerChips', { adminName: name, adminPassword, targetName, amount: customAmount });
     }
   };
 
@@ -449,6 +461,18 @@ export default function App() {
                   >
                     Quick Join: Main Table
                   </button>
+                </div>
+
+                <div className="mt-8 pt-6 border-t border-white/5 flex flex-col items-center gap-2">
+                  <span className="text-[8px] text-white/20 font-bold uppercase tracking-widest">Developed By</span>
+                  <a 
+                    href="https://facebook.com/shamimlemon" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-[10px] text-red-500/60 hover:text-red-500 font-black uppercase tracking-[0.2em] transition-all hover:scale-110"
+                  >
+                    Shamim Lemon
+                  </a>
                 </div>
               </div>
             </div>
@@ -685,7 +709,7 @@ export default function App() {
                   <div className="space-y-4">
                     <input type="text" value={manualName} onChange={e => setManualName(e.target.value)} placeholder="Player Name" className="w-full bg-black/40 border border-white/10 p-4 rounded-xl outline-none" />
                     <input type="number" value={manualAmount} onChange={e => setManualAmount(e.target.value)} placeholder="Amount" className="w-full bg-black/40 border border-white/10 p-4 rounded-xl outline-none" />
-                    <button onClick={() => socket?.emit('addPlayerChips', { adminName: name, targetName: manualName, amount: manualAmount })} className="w-full bg-red-600 p-4 rounded-xl font-black uppercase">Add Chips</button>
+                    <button onClick={() => socket?.emit('addPlayerChips', { adminName: name, adminPassword, targetName: manualName, amount: manualAmount })} className="w-full bg-red-600 p-4 rounded-xl font-black uppercase">Add Chips</button>
                   </div>
                 )}
               </div>
