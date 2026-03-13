@@ -606,8 +606,10 @@ export default function App() {
                 {canSideShow && <button onClick={handleSideShow} className="bg-zinc-900/90 border border-white/10 text-white font-black px-1.5 md:px-5 py-1.5 md:py-3 rounded-md md:rounded-xl text-[7px] md:text-xs uppercase tracking-widest hover:bg-zinc-800 transition-all active:scale-95">Side</button>}
                 <div className="flex items-stretch gap-px shadow-2xl">
                   <button onClick={() => takeAction('chaal')} className="bg-red-600 text-white font-black px-2 md:px-8 py-1.5 md:py-3 rounded-l-md md:rounded-l-xl uppercase tracking-widest min-w-[50px] md:min-w-[120px] hover:bg-red-500 transition-all active:scale-95">
-                    <span className="text-[4px] md:text-[9px] font-black text-white/60 leading-none mb-0.5">CHAAL</span>
-                    <span className="text-[8px] md:text-lg leading-none">{(currentPlayer?.isBlind ? gameState?.lastBet : (gameState?.lastBet || 0) * 2)?.toLocaleString()}</span>
+                    <div className="flex flex-col items-center">
+                      <span className="text-[4px] md:text-[9px] font-black text-white/60 leading-none mb-0.5">CHAAL</span>
+                      <span className="text-[8px] md:text-lg leading-none">{(currentPlayer?.isBlind ? gameState?.lastBet : (gameState?.lastBet || 0) * 2)?.toLocaleString()}</span>
+                    </div>
                   </button>
                   <button onClick={handleRaise} className="bg-red-700 text-white font-black px-2 md:px-5 rounded-r-md md:rounded-r-xl border-l border-red-500/30 text-sm md:text-2xl hover:bg-red-600 transition-all active:scale-95 flex items-center justify-center">+</button>
                 </div>
