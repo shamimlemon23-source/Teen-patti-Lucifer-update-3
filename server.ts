@@ -35,9 +35,11 @@ async function startServer() {
     cors: { origin: "*" },
     transports: ['polling', 'websocket']
   });
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   const rooms: any = {};
+  const turnTimers: any = {};
+  const sideShowRequests: any = {};
 
   const RANK_VALUE: Record<Rank, number> = {
     '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14
@@ -104,7 +106,10 @@ async function startServer() {
     }
     game.gameStarted = false;
     emitGameState(rid);
-    setTimeout(() => { if (!game.gameStarted) startGame(rid); }, 5000);
+
+    setTimeout(() => {
+      if (!game.gameStarted) startGame(rid);
+    }, 5000);
   }
 
   function nextTurn(rid: string) {
@@ -117,7 +122,9 @@ async function startServer() {
       if (!active[0].isBot) updatePlayerChips(active[0].name, active[0].chips);
       game.gameStarted = false;
       emitGameState(rid);
-      setTimeout(() => { if (!game.gameStarted) startGame(rid); }, 5000);
+      setTimeout(() => {
+        if (!game.gameStarted) startGame(rid);
+      }, 5000);
       return;
     }
     const oldTurn = game.currentTurn;
@@ -125,7 +132,11 @@ async function startServer() {
     while (game.players[game.currentTurn].isFolded);
     
     if (game.currentTurn <= oldTurn) game.roundCount++;
-    if (game.roundCount >= 5) return resolveShowdown(rid);
+    
+    if (game.roundCount >= 5) {
+      game.players.forEach((p: any) => { if (!p.isFolded) p.isBlind = false; });
+      return resolveShowdown(rid);
+    }
     
     emitGameState(rid);
     if (game.players[game.currentTurn].isBot) handleBotTurn(rid);
@@ -138,7 +149,9 @@ async function startServer() {
     const delay = 1500 + Math.random() * 2000;
     setTimeout(() => {
       if (!game.gameStarted || game.players[game.currentTurn].id !== currentPlayer.id) return;
+      
       const shouldFold = !currentPlayer.isBlind && Math.random() < 0.1;
+      
       if (shouldFold) {
         currentPlayer.isFolded = true;
       } else {
@@ -199,21 +212,38 @@ async function startServer() {
       }
       const game = rooms[rid];
       const playerName = (name || "Player").trim();
+      
       const existingPlayerIndex = game.players.findIndex((p: any) => p.name === playerName);
       if (existingPlayerIndex !== -1 && !game.players[existingPlayerIndex].isBot) {
         game.players[existingPlayerIndex].id = socket.id;
         game.players[existingPlayerIndex].chips = getPlayerChips(playerName);
       } else {
-        game.players.push({ id: socket.id, name: playerName, chips: getPlayerChips(playerName), hand: [], isFolded: false, isBlind: true, currentBet: 0, isBot: false });
+        game.players.push({ 
+          id: socket.id, 
+          name: playerName, 
+          chips: getPlayerChips(playerName), 
+          hand: [], 
+          isFolded: false, 
+          isBlind: true, 
+          currentBet: 0, 
+          isBot: false 
+        });
       }
+      
       socket.join(rid);
       emitGameState(rid);
+
       if (!game.gameStarted && game.players.length >= 3) {
-        setTimeout(() => { if (!game.gameStarted) startGame(rid); }, 2000);
+        setTimeout(() => {
+          if (!game.gameStarted) startGame(rid);
+        }, 2000);
       }
     });
 
-    socket.on("startGame", (rid) => startGame(rid?.trim().toLowerCase() || "main-table"));
+    socket.on("startGame", (rid) => {
+      const roomID = rid?.trim().toLowerCase() || "main-table";
+      startGame(roomID);
+    });
 
     socket.on("action", ({ roomId, action, amount }) => {
       const rid = roomId.trim().toLowerCase();
@@ -235,24 +265,35 @@ async function startServer() {
         player.isBlind = false;
         return emitGameState(rid);
       }
+      
       if (!player.isBot) updatePlayerChips(player.name, player.chips);
       nextTurn(rid);
+    });
+
+    socket.on("getAdminStats", (adminName) => {
+      if (adminName?.trim().toLowerCase() === "admin") {
+        socket.emit("adminStats", db.prepare('SELECT name, chips FROM players ORDER BY chips DESC').all());
+      }
     });
 
     socket.on("sideShowRequest", (rid) => {
       const roomID = rid?.trim().toLowerCase() || "main-table";
       const game = rooms[roomID];
       if (!game || !game.gameStarted) return;
+      
       const currentPlayer = game.players[game.currentTurn];
       if (currentPlayer.id !== socket.id || currentPlayer.isBlind) return;
+
       let prevIdx = (game.currentTurn - 1 + game.players.length) % game.players.length;
       let count = 0;
       while (game.players[prevIdx].isFolded && count < game.players.length) {
         prevIdx = (prevIdx - 1 + game.players.length) % game.players.length;
         count++;
       }
+
       const prevPlayer = game.players[prevIdx];
       if (prevPlayer.isBlind || prevPlayer.isFolded) return;
+
       io.to(prevPlayer.id).emit("sideShowPrompt", { fromName: currentPlayer.name });
     });
 
@@ -260,7 +301,9 @@ async function startServer() {
       const rid = roomId?.trim().toLowerCase() || "main-table";
       const game = rooms[rid];
       if (!game || !game.gameStarted) return;
+
       const currentPlayer = game.players[game.currentTurn];
+      
       let prevIdx = (game.currentTurn - 1 + game.players.length) % game.players.length;
       let count = 0;
       while (game.players[prevIdx].isFolded && count < game.players.length) {
@@ -268,18 +311,17 @@ async function startServer() {
         count++;
       }
       const prevPlayer = game.players[prevIdx];
+
       if (accepted) {
         const score1 = getHandScore(currentPlayer.hand);
         const score2 = getHandScore(prevPlayer.hand);
-        if (score1 > score2) prevPlayer.isFolded = true;
-        else currentPlayer.isFolded = true;
-        nextTurn(rid);
-      }
-    });
 
-    socket.on("getAdminStats", (adminName) => {
-      if (adminName?.trim().toLowerCase() === "admin") {
-        socket.emit("adminStats", db.prepare('SELECT name, chips FROM players ORDER BY chips DESC').all());
+        if (score1 > score2) {
+          prevPlayer.isFolded = true;
+        } else {
+          currentPlayer.isFolded = true;
+        }
+        nextTurn(rid);
       }
     });
 
