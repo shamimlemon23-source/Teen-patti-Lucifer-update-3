@@ -8,6 +8,7 @@ import Database from 'better-sqlite3';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// --- Database Setup ---
 const db = new Database('game.db');
 db.exec(`CREATE TABLE IF NOT EXISTS players (name TEXT PRIMARY KEY, chips BIGINT DEFAULT 50000000)`);
 
@@ -23,9 +24,14 @@ const updatePlayerChips = (name: string, chips: number) => {
   db.prepare('UPDATE players SET chips = ? WHERE name = ?').run(chips, name);
 };
 
+// --- Game Types ---
 type Suit = 'hearts' | 'diamonds' | 'clubs' | 'spades';
 type Rank = '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | 'K' | 'A';
 interface Card { suit: Suit; rank: Rank; }
+
+const RANK_VALUE: Record<Rank, number> = {
+  '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14
+};
 
 async function startServer() {
   const app = express();
@@ -39,10 +45,7 @@ async function startServer() {
   const rooms: any = {};
   const timers: any = {};
 
-  const RANK_VALUE: Record<Rank, number> = {
-    '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14
-  };
-
+  // --- Helper Functions ---
   function getHandScore(hand: Card[]) {
     const ranks = hand.map(c => RANK_VALUE[c.rank]).sort((a, b) => b - a);
     const suits = hand.map(c => c.suit);
@@ -65,6 +68,14 @@ async function startServer() {
     return 1000000 + ranks[0] * 10000 + ranks[1] * 100 + ranks[2];
   }
 
+  function createDeck(): Card[] {
+    const suits: Suit[] = ['hearts', 'diamonds', 'clubs', 'spades'];
+    const ranks: Rank[] = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+    const deck: Card[] = [];
+    for (const suit of suits) for (const rank of ranks) deck.push({ suit, rank });
+    return deck.sort(() => Math.random() - 0.5);
+  }
+
   function emitGameState(rid: string) {
     const game = rooms[rid];
     if (!game) return;
@@ -75,6 +86,7 @@ async function startServer() {
         if (socket) {
           const stateToSend = JSON.parse(JSON.stringify(game));
           stateToSend.players.forEach((p: any) => {
+            // Hide cards of other players unless it's a showdown
             if (p.id !== socketId && !p.isBot && !game.winner) {
               p.hand = p.hand.map(() => ({ suit: 'back', rank: '?' }));
             }
@@ -85,6 +97,7 @@ async function startServer() {
     }
   }
 
+  // --- Game Logic Functions ---
   function startTurnTimer(rid: string) {
     if (timers[rid]) clearInterval(timers[rid]);
     const game = rooms[rid];
@@ -97,7 +110,6 @@ async function startServer() {
         clearInterval(timers[rid]);
         const currentPlayer = game.players[game.currentTurn];
         if (currentPlayer) {
-          console.log(`Auto-folding ${currentPlayer.name} due to timeout`);
           currentPlayer.isFolded = true;
           nextTurn(rid);
         }
@@ -192,7 +204,6 @@ async function startServer() {
   function startGame(rid: string) {
     const game = rooms[rid];
     if (game && game.players.length >= 2) {
-      console.log(`Starting game in room: ${rid}`);
       game.gameStarted = true; 
       game.deck = createDeck(); 
       game.pot = 0; 
@@ -214,17 +225,8 @@ async function startServer() {
     }
   }
 
-  function createDeck(): Card[] {
-    const suits: Suit[] = ['hearts', 'diamonds', 'clubs', 'spades'];
-    const ranks: Rank[] = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
-    const deck: Card[] = [];
-    for (const suit of suits) for (const rank of ranks) deck.push({ suit, rank });
-    return deck.sort(() => Math.random() - 0.5);
-  }
-
+  // --- Socket Events ---
   io.on("connection", (socket) => {
-    console.log(`Player connected: ${socket.id}`);
-
     socket.on("disconnect", () => {
       Object.keys(rooms).forEach(rid => {
         const game = rooms[rid];
@@ -361,6 +363,7 @@ async function startServer() {
     });
   });
 
+  // --- Vite / Static Files ---
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({ server: { middlewareMode: true, hmr: false }, appType: "spa" });
@@ -372,4 +375,5 @@ async function startServer() {
   }
   httpServer.listen(PORT, "0.0.0.0", () => console.log(`Server live on ${PORT}`));
 }
+
 startServer();
