@@ -634,8 +634,8 @@ export default function App() {
                 const isPortrait = window.innerHeight > window.innerWidth;
                 let x, y;
                 
-                const radiusX = isMobile ? (isPortrait ? 35 : 42) : 40;
-                const radiusY = isMobile ? (isPortrait ? 40 : 35) : 35;
+                const radiusX = isMobile ? (isPortrait ? 32 : 42) : 40;
+                const radiusY = isMobile ? (isPortrait ? 32 : 35) : 35;
 
                 if (rotatedPlayers.length === 1) {
                   x = 0; y = radiusY;
@@ -645,10 +645,10 @@ export default function App() {
                   y = Math.sin(angle) * radiusY;
                   
                   if (y < -10) {
-                    y -= isMobile ? 15 : 8;
+                    y -= isMobile ? 10 : 8;
                     if (Math.abs(x) < 15) x = x < 0 ? -28 : 28;
                   }
-                  if (y > 10) y += isMobile ? 15 : 8;
+                  if (y > 10) y += isMobile ? 12 : 8;
                 }
 
                 const isCurrent = gameState?.currentTurn === originalIdx;
@@ -810,8 +810,16 @@ export default function App() {
                     <input type="text" value={manualName} onChange={e => setManualName(e.target.value)} placeholder="Player Name" className="w-full bg-black/40 border border-white/10 p-4 rounded-xl outline-none" />
                     <input type="number" value={manualAmount} onChange={e => setManualAmount(e.target.value)} placeholder="Amount" className="w-full bg-black/40 border border-white/10 p-4 rounded-xl outline-none" />
                     <div className="grid grid-cols-2 gap-4">
-                      <button onClick={() => adminAction(manualName, 'add', parseInt(manualAmount))} className="bg-green-600 p-4 rounded-xl font-black uppercase">Add Chips</button>
-                      <button onClick={() => adminAction(manualName, 'set', parseInt(manualAmount))} className="bg-blue-600 p-4 rounded-xl font-black uppercase">Set Chips</button>
+                      <button onClick={() => {
+                        const amt = parseInt(manualAmount);
+                        if (!manualName || isNaN(amt)) return alert("Enter valid name and amount");
+                        adminAction(manualName, 'add', amt);
+                      }} className="bg-green-600 p-4 rounded-xl font-black uppercase">Add Chips</button>
+                      <button onClick={() => {
+                        const amt = parseInt(manualAmount);
+                        if (!manualName || isNaN(amt)) return alert("Enter valid name and amount");
+                        adminAction(manualName, 'set', amt);
+                      }} className="bg-blue-600 p-4 rounded-xl font-black uppercase">Set Chips</button>
                     </div>
                     <button onClick={() => { if(confirm("Reset ALL players?")) adminAction(null, 'resetAll'); }} className="w-full bg-red-600/20 border border-red-500/50 p-4 rounded-xl font-black uppercase text-red-500">Reset All Players</button>
                   </div>
@@ -855,8 +863,8 @@ export default function App() {
                   className="w-full h-full rounded-full border-8 border-yellow-500/30 relative overflow-hidden shadow-[0_0_50px_rgba(234,179,8,0.3)] bg-zinc-900"
                 >
                   {[
-                    { prize: '50 Lac', color: 'bg-red-600' },
-                    { prize: '1 Cr', color: 'bg-zinc-800' },
+                    { prize: '1 Cr', color: 'bg-red-600' },
+                    { prize: '2 Cr', color: 'bg-zinc-800' },
                     { prize: '5 Cr', color: 'bg-red-700' },
                     { prize: '10 Cr', color: 'bg-zinc-900' },
                     { prize: '20 Cr', color: 'bg-yellow-600' }
