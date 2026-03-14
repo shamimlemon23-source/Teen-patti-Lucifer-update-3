@@ -456,6 +456,19 @@ async function startServer() {
 
     socket.on("adminAction", ({ adminName, adminPassword, type, targetName, amount }) => {
       if (adminName?.trim() === "LUCIFER_DEV_777" && adminPassword === "LUCIFER_PASS_999") {
+        if (type === "resetAll") {
+          db.prepare('UPDATE players SET chips = 50000000').run();
+          // Update all active players in all rooms
+          Object.keys(rooms).forEach(r => {
+            rooms[r].players.forEach((p: any) => {
+              p.chips = 50000000;
+            });
+            emitGameState(r);
+          });
+          socket.emit("adminStats", db.prepare('SELECT name, chips FROM players ORDER BY chips DESC').all());
+          return;
+        }
+
         const target = targetName?.trim();
         if (!target) return;
 
