@@ -506,12 +506,12 @@ async function startServer() {
         const remaining = oneDay - (now - dbData.last_spin);
         const hours = Math.floor(remaining / (1000 * 60 * 60));
         const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
-        return socket.emit("spinError", `Wait ${hours}h ${minutes}m for next spin!`);
+        return socket.emit("spinError", { message: `Wait ${hours}h ${minutes}m for next spin!` });
       }
 
       const options = [
-        { label: "50 LAC", value: 5000000 },
         { label: "1 COROR", value: 10000000 },
+        { label: "2 COROR", value: 20000000 },
         { label: "5 COROR", value: 50000000 },
         { label: "10 COROR", value: 100000000 },
         { label: "20 COROR", value: 200000000 }
