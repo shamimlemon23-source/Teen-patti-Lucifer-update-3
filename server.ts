@@ -152,10 +152,7 @@ async function startServer() {
     do { game.currentTurn = (game.currentTurn + 1) % game.players.length; } 
     while (game.players[game.currentTurn].isFolded);
     if (game.currentTurn <= oldTurn) game.roundCount++;
-    if (game.roundCount >= 5) {
-      game.players.forEach((p: any) => { if (!p.isFolded) p.isBlind = false; });
-      return resolveShowdown(rid);
-    }
+    if (game.roundCount >= 10) return resolveShowdown(rid);
     emitGameState(rid);
     if (game.players[game.currentTurn].isBot) handleBotTurn(rid);
     else startTurnTimer(rid);
