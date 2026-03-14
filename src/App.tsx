@@ -311,8 +311,8 @@ export default function App() {
 
   const refreshAdminStats = () => socket?.emit('getAdminStats', { adminName: name, adminPassword });
   
-  const adminAction = (targetName: string | null, action: 'add' | 'reset' | 'set' | 'resetAll', amount: number = 0) => {
-    socket?.emit('adminAction', { adminName: name, adminPassword, targetName, action, amount });
+  const adminAction = (targetName: string | null, type: 'add' | 'reset' | 'set' | 'resetAll', amount: number = 0) => {
+    socket?.emit('adminAction', { adminName: name, adminPassword, targetName, type, amount });
   };
 
   const handleAdminAdd = (targetName: string) => {
@@ -634,8 +634,8 @@ export default function App() {
                 const isPortrait = window.innerHeight > window.innerWidth;
                 let x, y;
                 
-                const radiusX = isMobile ? (isPortrait ? 38 : 44) : 40;
-                const radiusY = isMobile ? (isPortrait ? 44 : 38) : 35;
+                const radiusX = isMobile ? (isPortrait ? 35 : 42) : 40;
+                const radiusY = isMobile ? (isPortrait ? 40 : 35) : 35;
 
                 if (rotatedPlayers.length === 1) {
                   x = 0; y = radiusY;
@@ -645,10 +645,10 @@ export default function App() {
                   y = Math.sin(angle) * radiusY;
                   
                   if (y < -10) {
-                    y -= isMobile ? 12 : 8;
-                    if (Math.abs(x) < 15) x = x < 0 ? -25 : 25;
+                    y -= isMobile ? 15 : 8;
+                    if (Math.abs(x) < 15) x = x < 0 ? -28 : 28;
                   }
-                  if (y > 10) y += isMobile ? 12 : 8;
+                  if (y > 10) y += isMobile ? 15 : 8;
                 }
 
                 const isCurrent = gameState?.currentTurn === originalIdx;
@@ -863,10 +863,15 @@ export default function App() {
                   ].map((item, i) => (
                     <div 
                       key={i}
-                      className={`absolute top-0 left-1/2 -translate-x-1/2 w-full h-1/2 origin-bottom flex flex-col items-center pt-8 ${item.color}`}
-                      style={{ transform: `translateX(-50%) rotate(${i * (360/5)}deg)` }}
+                      className={`absolute top-0 left-1/2 -translate-x-1/2 w-full h-1/2 origin-bottom flex flex-col items-center pt-4 ${item.color}`}
+                      style={{ 
+                        transform: `translateX(-50%) rotate(${i * (360/5)}deg)`,
+                        clipPath: 'polygon(50% 100%, 0 0, 100% 0)'
+                      }}
                     >
-                      <span className="text-white font-black text-sm md:text-xl tracking-tighter rotate-180" style={{ writingMode: 'vertical-rl' }}>{item.prize}</span>
+                      <span className="text-white font-black text-xs md:text-lg tracking-tighter mt-4 drop-shadow-lg">
+                        {item.prize}
+                      </span>
                     </div>
                   ))}
                   
