@@ -3,33 +3,61 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import path from "path";
 import { fileURLToPath } from 'url';
-import Database from 'better-sqlite3';
-import fs from 'fs';
+import { initializeApp } from 'firebase/app';
+import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs, query, orderBy } from 'firebase/firestore';
+import firebaseConfig from './firebase-applet-config.json' assert { type: 'json' };
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const db = new Database('game.db');
-db.exec(`CREATE TABLE IF NOT EXISTS players (
-  name TEXT PRIMARY KEY, 
-  chips BIGINT DEFAULT 50000000,
-  last_spin INTEGER DEFAULT 0
-)`);
+// Initialize Firebase
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
 
-const getPlayerChips = (name: string): { chips: number, last_spin: number } => {
-  const row = db.prepare('SELECT chips, last_spin FROM players WHERE name = ?').get(name) as { chips: number, last_spin: number } | undefined;
-  if (row) return row;
-  const initialChips = 50000000; 
-  db.prepare('INSERT INTO players (name, chips, last_spin) VALUES (?, ?, ?)').run(name, initialChips, 0);
-  return { chips: initialChips, last_spin: 0 };
+const getPlayerChips = async (name: string, password?: string): Promise<{ chips: number, last_spin: number, error?: string }> => {
+  try {
+    const playerRef = doc(db, 'players', name);
+    const playerSnap = await getDoc(playerRef);
+    
+    if (playerSnap.exists()) {
+      const data = playerSnap.data();
+      if (password && data.password && data.password !== password) {
+        return { chips: 0, last_spin: 0, error: 'Incorrect password for this name!' };
+      }
+      return { chips: data.chips || 50000000, last_spin: data.last_spin || 0 };
+    }
+    
+    const initialChips = 50000000;
+    const newData = {
+      name,
+      chips: initialChips,
+      last_spin: 0,
+      password: password || ''
+    };
+    await setDoc(playerRef, newData);
+    return { chips: initialChips, last_spin: 0 };
+  } catch (error) {
+    console.error('Firestore Error:', error);
+    return { chips: 50000000, last_spin: 0 };
+  }
 };
 
-const updatePlayerChips = (name: string, chips: number) => {
-  db.prepare('UPDATE players SET chips = ? WHERE name = ?').run(chips, name);
+const updatePlayerChips = async (name: string, chips: number) => {
+  try {
+    const playerRef = doc(db, 'players', name);
+    await updateDoc(playerRef, { chips });
+  } catch (error) {
+    console.error('Firestore Update Error:', error);
+  }
 };
 
-const updateLastSpin = (name: string, time: number) => {
-  db.prepare('UPDATE players SET last_spin = ? WHERE name = ?').run(time, name);
+const updateLastSpin = async (name: string, time: number) => {
+  try {
+    const playerRef = doc(db, 'players', name);
+    await updateDoc(playerRef, { last_spin: time });
+  } catch (error) {
+    console.error('Firestore Spin Error:', error);
+  }
 };
 
 type Suit = 'hearts' | 'diamonds' | 'clubs' | 'spades';
@@ -312,7 +340,7 @@ async function startServer() {
       });
     });
 
-    socket.on("joinRoom", ({ roomId, name }) => {
+    socket.on("joinRoom", async ({ roomId, name, password }) => {
       let rid = (roomId || "table-1").trim().toLowerCase();
       console.log(`${name} joining room: ${rid}`);
       if (!rooms[rid]) {
@@ -326,6 +354,15 @@ async function startServer() {
       const game = rooms[rid];
       const playerName = (name || "Player").trim();
       
+      // Check if player already in room
+      const existingPlayerIndex = game.players.findIndex((p: any) => p.name === playerName);
+      const dbData = await getPlayerChips(playerName, password);
+
+      if (dbData.error) {
+        socket.emit("error", dbData.error);
+        return;
+      }
+      
       // Remove player from any other room they might be in to prevent ghosts
       Object.keys(rooms).forEach(otherRid => {
         if (otherRid !== rid) {
@@ -337,10 +374,6 @@ async function startServer() {
           }
         }
       });
-
-      // Check if player already in room
-      const existingPlayerIndex = game.players.findIndex((p: any) => p.name === playerName);
-      const dbData = getPlayerChips(playerName);
       
       if (existingPlayerIndex !== -1 && !game.players[existingPlayerIndex].isBot) {
         game.players[existingPlayerIndex].id = socket.id;
@@ -531,59 +564,86 @@ async function startServer() {
       emitGameState(rid);
     });
 
-    socket.on("getAdminStats", ({ adminName, adminPassword }) => {
+    const refreshAdminStats = async () => {
+      try {
+        const q = query(collection(db, 'players'), orderBy('chips', 'desc'));
+        const querySnapshot = await getDocs(q);
+        const stats: any[] = [];
+        querySnapshot.forEach((doc) => {
+          stats.push({ name: doc.id, chips: doc.data().chips });
+        });
+        socket.emit("adminStats", stats);
+      } catch (error) {
+        console.error('Admin Stats Error:', error);
+      }
+    };
+
+    socket.on("getAdminStats", async ({ adminName, adminPassword }) => {
       if (adminName?.trim() === "LUCIFER_DEV_777" && adminPassword === "LUCIFER_PASS_999") {
-        socket.emit("adminStats", db.prepare('SELECT name, chips FROM players ORDER BY chips DESC').all());
+        await refreshAdminStats();
       } else {
         socket.emit("adminMessage", "Invalid Admin Credentials");
       }
     });
 
-    socket.on("adminAction", ({ adminName, adminPassword, type, targetName, amount }) => {
+    socket.on("adminAction", async ({ adminName, adminPassword, type, targetName, amount }) => {
       if (adminName?.trim() === "LUCIFER_DEV_777" && adminPassword === "LUCIFER_PASS_999") {
         if (type === "resetAll") {
-          db.prepare('UPDATE players SET chips = 50000000').run();
-          // Update all active players in all rooms
-          Object.keys(rooms).forEach(r => {
-            rooms[r].players.forEach((p: any) => {
-              p.chips = 50000000;
+          try {
+            const querySnapshot = await getDocs(collection(db, 'players'));
+            const promises = querySnapshot.docs.map(d => updateDoc(d.ref, { chips: 50000000 }));
+            await Promise.all(promises);
+            
+            Object.keys(rooms).forEach(r => {
+              rooms[r].players.forEach((p: any) => {
+                p.chips = 50000000;
+              });
+              emitGameState(r);
             });
-            emitGameState(r);
-          });
-          socket.emit("adminStats", db.prepare('SELECT name, chips FROM players ORDER BY chips DESC').all());
+            await refreshAdminStats();
+          } catch (error) {
+            console.error('Admin Reset All Error:', error);
+          }
           return;
         }
 
         const target = targetName?.trim();
         if (!target) return;
 
-        if (type === "add") {
-          const add = parseInt(amount) || 0;
-          const exists = db.prepare('SELECT name FROM players WHERE name = ?').get(target);
-          if (exists) db.prepare('UPDATE players SET chips = chips + ? WHERE name = ?').run(add, target);
-          else db.prepare('INSERT INTO players (name, chips, last_spin) VALUES (?, ?, 0)').run(target, add);
-        } else if (type === "reset") {
-          db.prepare('UPDATE players SET chips = 50000000 WHERE name = ?').run(target);
-        } else if (type === "set") {
-          const setVal = parseInt(amount) || 0;
-          db.prepare('UPDATE players SET chips = ? WHERE name = ?').run(setVal, target);
-        }
-
-        // Update active players in rooms
-        Object.keys(rooms).forEach(r => {
-          const p = rooms[r].players.find((pl: any) => pl.name === target);
-          if (p) {
-            const updated = db.prepare('SELECT chips FROM players WHERE name = ?').get(target) as { chips: number };
-            p.chips = updated.chips;
-            emitGameState(r);
+        const playerRef = doc(db, 'players', target);
+        try {
+          if (type === "add") {
+            const add = parseInt(amount) || 0;
+            const snap = await getDoc(playerRef);
+            if (snap.exists()) await updateDoc(playerRef, { chips: (snap.data().chips || 0) + add });
+            else await setDoc(playerRef, { name: target, chips: add, last_spin: 0, password: '' });
+          } else if (type === "reset") {
+            await updateDoc(playerRef, { chips: 50000000 });
+          } else if (type === "set") {
+            const setVal = parseInt(amount) || 0;
+            await updateDoc(playerRef, { chips: setVal });
           }
-        });
-        socket.emit("adminStats", db.prepare('SELECT name, chips FROM players ORDER BY chips DESC').all());
+
+          // Update active players in rooms
+          Object.keys(rooms).forEach(async r => {
+            const p = rooms[r].players.find((pl: any) => pl.name === target);
+            if (p) {
+              const snap = await getDoc(playerRef);
+              if (snap.exists()) {
+                p.chips = snap.data().chips;
+                emitGameState(r);
+              }
+            }
+          });
+          await refreshAdminStats();
+        } catch (error) {
+          console.error('Admin Action Error:', error);
+        }
       }
     });
 
-    socket.on("spinWheel", ({ name }) => {
-      const dbData = getPlayerChips(name);
+    socket.on("spinWheel", async ({ name }) => {
+      const dbData = await getPlayerChips(name);
       const now = Date.now();
       const oneDay = 24 * 60 * 60 * 1000;
 
@@ -606,8 +666,8 @@ async function startServer() {
       const win = options[randomIndex];
 
       const newChips = dbData.chips + win.value;
-      updatePlayerChips(name, newChips);
-      updateLastSpin(name, now);
+      await updatePlayerChips(name, newChips);
+      await updateLastSpin(name, now);
 
       // Update player in rooms
       Object.keys(rooms).forEach(r => {
