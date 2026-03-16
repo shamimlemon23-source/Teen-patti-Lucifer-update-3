@@ -1,16 +1,17 @@
 import express from "express";
 import { createServer } from "http";
 import { Server } from "socket.io";
+import { readFileSync } from "fs";
 import path from "path";
 import { fileURLToPath } from 'url';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs, query, orderBy } from 'firebase/firestore';
-import firebaseConfig from './firebase-applet-config.json' assert { type: 'json' };
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Initialize Firebase
+const firebaseConfig = JSON.parse(readFileSync(new URL('./firebase-applet-config.json', import.meta.url), 'utf-8'));
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
 
