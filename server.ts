@@ -227,6 +227,11 @@ async function startServer() {
       game.winner = null; 
       game.roundCount = 0;
       game.players.forEach((p: any) => {
+        // Fix for bot chips going negative or too low
+        if (p.isBot && p.chips < 1000000) {
+          p.chips = 500000000;
+        }
+        
         p.hand = [game.deck.pop(), game.deck.pop(), game.deck.pop()];
         p.isFolded = false; 
         p.isBlind = true; 
@@ -428,6 +433,7 @@ async function startServer() {
         }
       } else if (action === "see") {
         player.isBlind = false;
+        io.to(rid).emit("gameNotification", { message: `${player.name} has seen their cards!` });
         return emitGameState(rid);
       } else if (action === "show") {
         const active = game.players.filter((p: any) => !p.isFolded);
@@ -444,6 +450,85 @@ async function startServer() {
       
       if (!player.isBot) updatePlayerChips(player.name, player.chips);
       nextTurn(rid);
+    });
+
+    socket.on("sideShowRequest", (roomId) => {
+      const rid = roomId.trim().toLowerCase();
+      const game = rooms[rid];
+      if (!game || !game.gameStarted) return;
+      const player = game.players[game.currentTurn];
+      if (!player || player.id !== socket.id || player.isBlind) return;
+
+      // Find previous active player
+      let prevIdx = (game.currentTurn - 1 + game.players.length) % game.players.length;
+      let count = 0;
+      while (game.players[prevIdx].isFolded && count < game.players.length) {
+        prevIdx = (prevIdx - 1 + game.players.length) % game.players.length;
+        count++;
+      }
+      const prevPlayer = game.players[prevIdx];
+      if (!prevPlayer || prevPlayer.isBlind || prevPlayer.isFolded) return;
+
+      // Deduct bet for side show
+      const bet = game.lastBet * 2;
+      if (player.chips < bet) return;
+      player.chips -= bet;
+      game.pot += bet;
+      if (!player.isBot) updatePlayerChips(player.name, player.chips);
+
+      if (prevPlayer.isBot) {
+        // Bot always accepts side show for now
+        setTimeout(() => {
+          const myScore = getHandScore(player.hand);
+          const botScore = getHandScore(prevPlayer.hand);
+          if (myScore > botScore) {
+            prevPlayer.isFolded = true;
+            io.to(rid).emit("gameNotification", { message: `${player.name} won side show against ${prevPlayer.name}!` });
+          } else {
+            player.isFolded = true;
+            io.to(rid).emit("gameNotification", { message: `${prevPlayer.name} won side show against ${player.name}!` });
+          }
+          nextTurn(rid);
+        }, 2000);
+      } else {
+        io.to(prevPlayer.id).emit("sideShowPrompt", { fromId: player.id, fromName: player.name });
+        io.to(rid).emit("gameNotification", { message: `${player.name} requested side show from ${prevPlayer.name}` });
+      }
+      emitGameState(rid);
+    });
+
+    socket.on("sideShowResponse", ({ roomId, accepted }) => {
+      const rid = roomId.trim().toLowerCase();
+      const game = rooms[rid];
+      if (!game || !game.gameStarted) return;
+      
+      const prevIdx = (game.currentTurn - 1 + game.players.length) % game.players.length;
+      // This is tricky because the turn might have changed if we are not careful
+      // But sideShowResponse happens while it's still the requester's turn (we haven't called nextTurn yet)
+      const requester = game.players[game.currentTurn];
+      
+      // Find the player who was asked (the one who just responded)
+      const responder = game.players.find((p: any) => p.id === socket.id);
+      if (!responder || !requester) return;
+
+      if (accepted) {
+        const reqScore = getHandScore(requester.hand);
+        const resScore = getHandScore(responder.hand);
+        
+        if (reqScore > resScore) {
+          responder.isFolded = true;
+          io.to(rid).emit("gameNotification", { message: `${requester.name} won side show against ${responder.name}!` });
+        } else {
+          requester.isFolded = true;
+          io.to(rid).emit("gameNotification", { message: `${responder.name} won side show against ${requester.name}!` });
+        }
+        nextTurn(rid);
+      } else {
+        io.to(rid).emit("gameNotification", { message: `${responder.name} declined side show.` });
+        // Turn stays with requester, they must continue
+        startTurnTimer(rid);
+      }
+      emitGameState(rid);
     });
 
     socket.on("getAdminStats", ({ adminName, adminPassword }) => {
