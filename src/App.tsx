@@ -10,6 +10,7 @@ import {
   LogOut, 
   Play, 
   User,
+  Lock,
   Hash,
   Minimize2,
   Maximize2,
@@ -125,6 +126,7 @@ export default function App() {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [name, setName] = useState('');
+  const [password, setPassword] = useState('');
   const [roomId, setRoomId] = useState('table-1');
   const [joined, setJoined] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
@@ -247,6 +249,11 @@ export default function App() {
       setTimeout(() => setAdminMessage(''), 3000);
     });
 
+    newSocket.on('error', (msg: string) => {
+      alert(msg);
+      setJoined(false);
+    });
+
     newSocket.on('sideShowPrompt', (data: { fromName: string }) => {
       setSideShowPrompt(data);
     });
@@ -262,7 +269,7 @@ export default function App() {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
-  const joinRoom = () => { if (socket && name) { socket.emit('joinRoom', { roomId, name }); setJoined(true); } };
+  const joinRoom = () => { if (socket && name) { socket.emit('joinRoom', { roomId, name, password }); setJoined(true); } };
   const startGame = () => socket?.emit('startGame', roomId);
   
   const takeAction = (action: string, amount?: number) => {
@@ -514,6 +521,16 @@ export default function App() {
                     value={name} 
                     onChange={e => setName(e.target.value)} 
                     placeholder="Your Name" 
+                    className="w-full bg-white/5 p-4 pl-12 rounded-2xl border border-white/10 outline-none focus:border-red-600 transition-all font-bold" 
+                  />
+                </div>
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/20" />
+                  <input 
+                    type="password" 
+                    value={password} 
+                    onChange={e => setPassword(e.target.value)} 
+                    placeholder="Set/Enter Password" 
                     className="w-full bg-white/5 p-4 pl-12 rounded-2xl border border-white/10 outline-none focus:border-red-600 transition-all font-bold" 
                   />
                 </div>
