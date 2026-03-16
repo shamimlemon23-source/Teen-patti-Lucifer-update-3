@@ -143,6 +143,7 @@ export default function App() {
   const [showSpinWheel, setShowSpinWheel] = useState(false);
   const [isSpinning, setIsSpinning] = useState(false);
   const [spinResult, setSpinResult] = useState<string | null>(null);
+  const [gameNotification, setGameNotification] = useState<string | null>(null);
   const [lastSpinTime, setLastSpinTime] = useState<number>(0);
 
   const isAdmin = useMemo(() => name.trim() === 'LUCIFER_DEV_777', [name]);
@@ -160,6 +161,15 @@ export default function App() {
       socket.on('spinError', (data: { message: string }) => {
         setIsSpinning(false);
         alert(data.message);
+      });
+
+      socket.on('gameNotification', (data: { message: string }) => {
+        setGameNotification(data.message);
+        setTimeout(() => setGameNotification(null), 4000);
+      });
+
+      socket.on('sideShowPrompt', (data: { fromId: string, fromName: string }) => {
+        setSideShowPrompt(data);
       });
     }
   }, [socket]);
@@ -560,6 +570,19 @@ export default function App() {
         <>
           {/* Game Area */}
           <main className="relative flex-1 flex flex-col items-center justify-center overflow-hidden">
+            {/* Notification Bar */}
+            <AnimatePresence>
+              {gameNotification && (
+                <motion.div 
+                  initial={{ y: -50, opacity: 0 }}
+                  animate={{ y: 20, opacity: 1 }}
+                  exit={{ y: -50, opacity: 0 }}
+                  className="absolute top-0 left-1/2 -translate-x-1/2 z-[60] bg-red-600/90 backdrop-blur-xl border border-red-500/50 px-6 py-2 rounded-full shadow-2xl"
+                >
+                  <span className="text-white font-black text-[10px] md:text-sm uppercase tracking-widest whitespace-nowrap">{gameNotification}</span>
+                </motion.div>
+              )}
+            </AnimatePresence>
             <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
               {/* Table Surface */}
               <div className="absolute w-[90%] h-[70%] md:w-[80%] md:h-[60%] bg-emerald-900/20 rounded-[100px] md:rounded-[200px] border-[10px] md:border-[20px] border-zinc-900/80 shadow-[inset_0_0_100px_rgba(0,0,0,0.8),0_20px_50px_rgba(0,0,0,0.5)] flex items-center justify-center overflow-hidden">
@@ -675,6 +698,9 @@ export default function App() {
                         {isMe && (
                           <div className="absolute -top-3 -right-3 bg-yellow-500 text-black text-[8px] md:text-[10px] font-black px-2 py-1 rounded-lg shadow-xl z-10 uppercase tracking-tighter">You</div>
                         )}
+                        {!player.isBlind && !player.isFolded && (
+                          <div className="absolute -bottom-3 bg-emerald-500 text-white text-[6px] md:text-[8px] font-black px-2 py-0.5 rounded-full shadow-lg z-10 uppercase tracking-widest border border-emerald-400/50">Seen</div>
+                        )}
                         {isCurrent && (
                           <div className="absolute -inset-2 border-2 border-red-500/30 rounded-[2rem] animate-ping" />
                         )}
@@ -702,7 +728,7 @@ export default function App() {
           </main>
 
           {/* Controls */}
-          <footer className="relative p-2 md:p-6 bg-gradient-to-t from-black via-black/80 to-transparent z-50">
+          <footer className="relative p-2 md:p-6 pb-14 md:pb-20 bg-gradient-to-t from-black via-black/80 to-transparent z-50">
             <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-2 md:gap-6">
               <div className="flex items-center gap-2 md:gap-4 bg-black/80 backdrop-blur-3xl p-2 md:p-4 rounded-2xl border border-white/10 w-full md:w-auto justify-between md:justify-start shadow-2xl">
                 <div className="flex flex-col items-start">
