@@ -74,6 +74,11 @@ async function startServer() {
   });
   const PORT = Number(process.env.PORT) || 3000;
 
+  // API routes go here
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
   const rooms: any = {};
   const turnTimers: any = {};
 
