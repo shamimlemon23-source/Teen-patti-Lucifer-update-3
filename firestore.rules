@@ -25,17 +25,10 @@ service cloud.firestore {
     }
 
     match /players/{playerName} {
-      // For this specific app, the server handles most logic.
-      // However, we can allow the user to read their own data if they are logged in.
-      // But since the app uses Name-based login without Firebase Auth for players,
-      // we will rely on the server to be the secure gatekeeper.
-      // To allow the server to work, we'll keep rules restrictive for clients.
-      
-      allow read, write: if isAdmin();
-      
-      // If we want to allow the server (which might not be using Admin SDK in this environment)
-      // to access data, we might need to be careful.
-      // But usually, the server in this environment has full access if configured correctly.
+      // The server uses the JS SDK and is unauthenticated in this environment.
+      // To allow the server to manage player data, we allow read/write.
+      // In a production app, you would use the Admin SDK or authenticate the server.
+      allow read, write: if true;
     }
     
     match /{path=**} {
