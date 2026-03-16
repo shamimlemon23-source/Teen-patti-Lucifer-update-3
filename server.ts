@@ -39,17 +39,20 @@ if (!firebaseConfig.apiKey) {
 const firebaseApp = initializeApp(firebaseConfig);
 const db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId || undefined);
 
-const getPlayerChips = async (name: string, password?: string): Promise<{ chips: number, last_spin: number, error?: string }> => {
+const getPlayerChips = async (name: string, password?: string, ignorePassword = false): Promise<{ chips: number, last_spin: number, error?: string }> => {
   try {
     const playerRef = doc(db, 'players', name);
     const playerSnap = await getDoc(playerRef);
     
     if (playerSnap.exists()) {
       const data = playerSnap.data();
-      if (password && data.password && data.password !== password) {
-        return { chips: 0, last_spin: 0, error: 'Incorrect password for this name!' };
+      // If player has a password, we MUST check it, unless ignorePassword is true (internal use)
+      if (!ignorePassword && data.password && data.password.trim() !== "") {
+        if (!password || data.password !== password) {
+          return { chips: 0, last_spin: 0, error: 'Incorrect password for this name!' };
+        }
       }
-      return { chips: data.chips || 50000000, last_spin: data.last_spin || 0 };
+      return { chips: (data.chips !== undefined) ? Number(data.chips) : 50000000, last_spin: data.last_spin || 0 };
     }
     
     const initialChips = 50000000;
@@ -618,6 +621,7 @@ async function startServer() {
 
     socket.on("adminAction", async ({ adminName, adminPassword, type, targetName, amount }) => {
       if (adminName?.trim() === "LUCIFER_DEV_777" && adminPassword === "LUCIFER_PASS_999") {
+        console.log(`Admin Action: ${type} on ${targetName} with amount ${amount}`);
         if (type === "resetAll") {
           try {
             const querySnapshot = await getDocs(collection(db, 'players'));
@@ -631,6 +635,7 @@ async function startServer() {
               emitGameState(r);
             });
             await refreshAdminStats();
+            socket.emit("adminMessage", "All players reset to 5 Cr");
           } catch (error) {
             console.error('Admin Reset All Error:', error);
           }
@@ -643,37 +648,45 @@ async function startServer() {
         const playerRef = doc(db, 'players', target);
         try {
           if (type === "add") {
-            const add = parseInt(amount) || 0;
+            const add = Number(amount) || 0;
             const snap = await getDoc(playerRef);
-            if (snap.exists()) await updateDoc(playerRef, { chips: (snap.data().chips || 0) + add });
-            else await setDoc(playerRef, { name: target, chips: add, last_spin: 0, password: '' });
+            if (snap.exists()) {
+              const newChips = (Number(snap.data().chips) || 0) + add;
+              await updateDoc(playerRef, { chips: newChips });
+            } else {
+              await setDoc(playerRef, { name: target, chips: add, last_spin: 0, password: '' });
+            }
           } else if (type === "reset") {
             await updateDoc(playerRef, { chips: 50000000 });
           } else if (type === "set") {
-            const setVal = parseInt(amount) || 0;
+            const setVal = Number(amount) || 0;
             await updateDoc(playerRef, { chips: setVal });
           }
 
           // Update active players in rooms
-          Object.keys(rooms).forEach(async r => {
-            const p = rooms[r].players.find((pl: any) => pl.name === target);
-            if (p) {
-              const snap = await getDoc(playerRef);
-              if (snap.exists()) {
-                p.chips = snap.data().chips;
+          const updatedSnap = await getDoc(playerRef);
+          if (updatedSnap.exists()) {
+            const updatedChips = updatedSnap.data().chips;
+            Object.keys(rooms).forEach(r => {
+              const p = rooms[r].players.find((pl: any) => pl.name === target);
+              if (p) {
+                p.chips = updatedChips;
                 emitGameState(r);
               }
-            }
-          });
+            });
+          }
+          
           await refreshAdminStats();
+          socket.emit("adminMessage", `Action ${type} successful for ${target}`);
         } catch (error) {
           console.error('Admin Action Error:', error);
+          socket.emit("adminMessage", "Error performing admin action");
         }
       }
     });
 
     socket.on("spinWheel", async ({ name }) => {
-      const dbData = await getPlayerChips(name);
+      const dbData = await getPlayerChips(name, undefined, true);
       const now = Date.now();
       const oneDay = 24 * 60 * 60 * 1000;
 
