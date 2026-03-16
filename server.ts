@@ -6,14 +6,38 @@ import path from "path";
 import { fileURLToPath } from 'url';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs, query, orderBy } from 'firebase/firestore';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Initialize Firebase
-const firebaseConfig = JSON.parse(readFileSync(new URL('./firebase-applet-config.json', import.meta.url), 'utf-8'));
+let firebaseConfig: any;
+try {
+  const configPath = new URL('./firebase-applet-config.json', import.meta.url);
+  firebaseConfig = JSON.parse(readFileSync(configPath, 'utf-8'));
+} catch (e) {
+  console.warn("Could not find firebase-applet-config.json, using environment variables");
+  firebaseConfig = {
+    apiKey: process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY,
+    authDomain: process.env.FIREBASE_AUTH_DOMAIN || process.env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: process.env.FIREBASE_STORAGE_BUCKET || process.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || process.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: process.env.FIREBASE_APP_ID || process.env.VITE_FIREBASE_APP_ID,
+    measurementId: process.env.FIREBASE_MEASUREMENT_ID || process.env.VITE_FIREBASE_MEASUREMENT_ID,
+    firestoreDatabaseId: process.env.FIREBASE_FIRESTORE_DATABASE_ID || process.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID
+  };
+}
+
+if (!firebaseConfig.apiKey) {
+  console.error("CRITICAL: Firebase configuration is missing! Please set FIREBASE_API_KEY etc.");
+}
+
 const firebaseApp = initializeApp(firebaseConfig);
-const db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+const db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId || undefined);
 
 const getPlayerChips = async (name: string, password?: string): Promise<{ chips: number, last_spin: number, error?: string }> => {
   try {
