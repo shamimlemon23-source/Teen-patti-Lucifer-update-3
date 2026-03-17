@@ -4,7 +4,7 @@ import { Server } from "socket.io";
 import { readFileSync } from "fs";
 import path from "path";
 import { fileURLToPath } from 'url';
-import * as admin from 'firebase-admin';
+import admin from 'firebase-admin';
 import dotenv from 'dotenv';
 
 dotenv.config();
