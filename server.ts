@@ -16,10 +16,12 @@ const __dirname = path.dirname(__filename);
 // Initialize Firebase
 let firebaseConfig: any;
 try {
-  const configPath = new URL('./firebase-applet-config.json', import.meta.url);
+  const configPath = path.join(__dirname, 'firebase-applet-config.json');
+  console.log("Loading Firebase config from:", configPath);
   firebaseConfig = JSON.parse(readFileSync(configPath, 'utf-8'));
+  console.log("Firebase config loaded successfully for project:", firebaseConfig.projectId);
 } catch (e) {
-  console.warn("Could not find firebase-applet-config.json, using environment variables");
+  console.warn("Could not find or parse firebase-applet-config.json, using environment variables. Error:", e instanceof Error ? e.message : e);
   firebaseConfig = {
     apiKey: process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY,
     authDomain: process.env.FIREBASE_AUTH_DOMAIN || process.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -37,11 +39,18 @@ if (!firebaseConfig.apiKey) {
 }
 
 // Initialize Firebase Admin
-initializeApp({
-  projectId: firebaseConfig.projectId,
-});
+try {
+  console.log("Initializing Firebase Admin with Project ID:", firebaseConfig.projectId);
+  initializeApp({
+    projectId: firebaseConfig.projectId,
+  });
+  console.log("Firebase Admin initialized.");
+} catch (e) {
+  console.error("Error initializing Firebase Admin:", e);
+}
 
 const db = getFirestore(firebaseConfig.firestoreDatabaseId || undefined);
+console.log("Firestore instance created for database:", firebaseConfig.firestoreDatabaseId || "(default)");
 
 // Test Firestore connection at startup
 async function testConnection() {
@@ -94,9 +103,10 @@ const getPlayerChips = async (name: string, password?: string, ignorePassword = 
     await playerRef.set(newData);
     return { chips: initialChips, last_spin: 0 };
   } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
     console.error('Firestore Error in getPlayerChips:', error);
     // CRITICAL: Do not allow login if Firestore is failing, otherwise password check is bypassed
-    return { chips: 0, last_spin: 0, error: 'Database connection error. Please try again later.' };
+    return { chips: 0, last_spin: 0, error: `Database connection error: ${errorMsg}. Please try again later.` };
   }
 };
 
@@ -105,7 +115,9 @@ const updatePlayerChips = async (name: string, chips: number) => {
     const playerRef = db.collection('players').doc(name);
     await playerRef.update({ chips });
   } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
     console.error('Firestore Update Error:', error);
+    throw new Error(`Database update error: ${errorMsg}`);
   }
 };
 
@@ -114,7 +126,9 @@ const updateLastSpin = async (name: string, time: number) => {
     const playerRef = db.collection('players').doc(name);
     await playerRef.update({ last_spin: time });
   } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
     console.error('Firestore Spin Error:', error);
+    throw new Error(`Database spin update error: ${errorMsg}`);
   }
 };
 
@@ -133,7 +147,28 @@ async function startServer() {
 
   // API routes go here
   app.get("/api/health", (req, res) => {
-    res.json({ status: "ok", timestamp: new Date().toISOString() });
+    res.json({ status: "ok", timestamp: new Date().toISOString(), projectId: firebaseConfig.projectId });
+  });
+
+  app.get("/api/db-test", async (req, res) => {
+    try {
+      console.log("Manual DB test requested...");
+      const snap = await db.collection('system').doc('health').get();
+      res.json({ 
+        status: "connected", 
+        exists: snap.exists, 
+        projectId: firebaseConfig.projectId, 
+        databaseId: firebaseConfig.firestoreDatabaseId || "(default)"
+      });
+    } catch (error) {
+      console.error("Manual DB test failed:", error);
+      res.status(500).json({ 
+        status: "error", 
+        message: error instanceof Error ? error.message : String(error),
+        projectId: firebaseConfig.projectId,
+        databaseId: firebaseConfig.firestoreDatabaseId || "(default)"
+      });
+    }
   });
 
   const rooms: any = {};
