@@ -1,4 +1,12 @@
 import express from "express";
+console.log("Server starting...");
+try {
+  console.log("Checking firebase package resolution...");
+  import.meta.resolve('firebase/app');
+  console.log("firebase/app resolved successfully.");
+} catch (e) {
+  console.error("CRITICAL: firebase/app could not be resolved!", e);
+}
 import { createServer } from "http";
 import { Server } from "socket.io";
 import { readFileSync } from "fs";
@@ -7,9 +15,8 @@ import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 import dotenv from 'dotenv';
 
-const require = createRequire(import.meta.url);
-const { initializeApp } = require('firebase/app');
-const { 
+import { initializeApp } from 'firebase/app';
+import { 
   getFirestore, 
   collection, 
   doc, 
@@ -21,7 +28,7 @@ const {
   limit, 
   getDocs, 
   writeBatch
-} = require('firebase/firestore');
+} from 'firebase/firestore';
 
 dotenv.config();
 
