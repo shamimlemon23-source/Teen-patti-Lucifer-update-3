@@ -9,6 +9,7 @@ import dotenv from 'dotenv';
 
 const require = createRequire(import.meta.url);
 const admin = require('firebase-admin');
+const { getFirestore } = require('firebase-admin/firestore');
 
 dotenv.config();
 
@@ -18,27 +19,37 @@ const __dirname = path.dirname(__filename);
 // Initialize Firebase
 let firebaseConfig: any;
 try {
-  const configPath = path.join(__dirname, 'firebase-applet-config.json');
-  console.log("Loading Firebase config from:", configPath);
-  firebaseConfig = JSON.parse(readFileSync(configPath, 'utf-8'));
-  console.log("Firebase config loaded successfully for project:", firebaseConfig.projectId);
-  console.log("Environment check - GOOGLE_APPLICATION_CREDENTIALS:", process.env.GOOGLE_APPLICATION_CREDENTIALS);
+  // Try multiple paths for the config file
+  const rootPath = process.cwd();
+  const pathsToTry = [
+    path.join(rootPath, 'firebase-applet-config.json'),
+    path.join(rootPath, 'src', 'firebase-applet-config.json'),
+    path.join(__dirname, 'firebase-applet-config.json')
+  ];
+  
+  let configFound = false;
+  for (const configPath of pathsToTry) {
+    try {
+      console.log("Checking Firebase config at:", configPath);
+      const content = readFileSync(configPath, 'utf-8');
+      firebaseConfig = JSON.parse(content);
+      console.log("Firebase config loaded successfully from:", configPath);
+      configFound = true;
+      break;
+    } catch (e) {
+      // Continue to next path
+    }
+  }
+
+  if (!configFound) {
+    throw new Error("Could not find firebase-applet-config.json in any expected location.");
+  }
 } catch (e) {
-  console.warn("Could not find or parse firebase-applet-config.json, using environment variables. Error:", e instanceof Error ? e.message : e);
+  console.warn("Falling back to environment variables for Firebase config. Error:", e instanceof Error ? e.message : e);
   firebaseConfig = {
-    apiKey: process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY,
-    authDomain: process.env.FIREBASE_AUTH_DOMAIN || process.env.VITE_FIREBASE_AUTH_DOMAIN,
     projectId: process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID,
-    storageBucket: process.env.FIREBASE_STORAGE_BUCKET || process.env.VITE_FIREBASE_STORAGE_BUCKET,
-    messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID || process.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-    appId: process.env.FIREBASE_APP_ID || process.env.VITE_FIREBASE_APP_ID,
-    measurementId: process.env.FIREBASE_MEASUREMENT_ID || process.env.VITE_FIREBASE_MEASUREMENT_ID,
     firestoreDatabaseId: process.env.FIREBASE_FIRESTORE_DATABASE_ID || process.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID
   };
-}
-
-if (!firebaseConfig.apiKey) {
-  console.error("CRITICAL: Firebase configuration is missing! Please set FIREBASE_API_KEY etc.");
 }
 
 // Initialize Firebase
@@ -50,34 +61,44 @@ try {
     console.error("CRITICAL: Firebase Project ID is missing! Database will not work.");
   } else {
     console.log("Initializing Firebase Admin with Project ID:", projectId);
-    console.log("Using Database ID:", firebaseConfig.firestoreDatabaseId || "(default)");
     
+    let app;
     if (!admin.apps.length) {
-      admin.initializeApp({
+      app = admin.initializeApp({
         projectId: projectId,
       });
-    }
-    
-    // Get Firestore instance, optionally specifying the database ID
-    if (firebaseConfig.firestoreDatabaseId) {
-      db = admin.firestore(firebaseConfig.firestoreDatabaseId);
     } else {
-      db = admin.firestore();
+      app = admin.app();
     }
     
-    console.log("Firestore Admin instance created.");
-
-    // Test Firestore connection at startup
-    const testConnection = async () => {
-      try {
-        console.log("Testing Firestore connection...");
-        await db.collection('system').doc('health').get();
-        console.log("Firestore connection successful.");
-      } catch (error) {
-        console.warn("Firestore health check warning (this is normal if 'system/health' doc doesn't exist):", error instanceof Error ? error.message : error);
-      }
-    };
-    testConnection();
+    // Get Firestore instance, correctly handling named databases
+    const dbId = firebaseConfig.firestoreDatabaseId || process.env.FIREBASE_FIRESTORE_DATABASE_ID || process.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID;
+    
+    if (dbId) {
+      console.log("Using Named Database ID:", dbId);
+      db = getFirestore(app, dbId);
+    } else {
+      console.log("Using Default Database");
+      db = getFirestore(app);
+    }
+    
+    if (db) {
+      console.log("Firestore Admin instance created successfully.");
+      
+      // Test Firestore connection at startup
+      const testConnection = async () => {
+        try {
+          console.log("Testing Firestore connection...");
+          await db.collection('system').doc('health').get();
+          console.log("Firestore connection successful.");
+        } catch (error) {
+          console.warn("Firestore health check warning (this is normal if 'system/health' doc doesn't exist):", error instanceof Error ? error.message : error);
+        }
+      };
+      testConnection();
+    } else {
+      console.error("FAILED to create Firestore instance.");
+    }
   }
 } catch (e) {
   console.error("Error during Firebase Admin initialization:", e);
