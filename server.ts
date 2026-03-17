@@ -6,10 +6,22 @@ import path from "path";
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 import dotenv from 'dotenv';
+import { initializeApp } from 'firebase/app';
+import { 
+  getFirestore, 
+  collection, 
+  doc, 
+  getDoc, 
+  updateDoc, 
+  setDoc, 
+  query, 
+  orderBy, 
+  limit, 
+  getDocs, 
+  writeBatch
+} from 'firebase/firestore';
 
 const require = createRequire(import.meta.url);
-const admin = require('firebase-admin');
-const { getFirestore } = require('firebase-admin/firestore');
 
 dotenv.config();
 
@@ -56,20 +68,21 @@ try {
 let db: any;
 try {
   const projectId = firebaseConfig.projectId || process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID;
+  const apiKey = firebaseConfig.apiKey || process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY;
   
-  if (!projectId) {
-    console.error("CRITICAL: Firebase Project ID is missing! Database will not work.");
+  if (!projectId || !apiKey) {
+    console.error("CRITICAL: Firebase Project ID or API Key is missing! Database will not work.");
   } else {
-    console.log("Initializing Firebase Admin with Project ID:", projectId);
+    console.log("Initializing Firebase Client SDK with Project ID:", projectId);
     
-    let app;
-    if (!admin.apps.length) {
-      app = admin.initializeApp({
-        projectId: projectId,
-      });
-    } else {
-      app = admin.app();
-    }
+    const app = initializeApp({
+      apiKey: apiKey,
+      authDomain: firebaseConfig.authDomain || `${projectId}.firebaseapp.com`,
+      projectId: projectId,
+      storageBucket: firebaseConfig.storageBucket || `${projectId}.firebasestorage.app`,
+      messagingSenderId: firebaseConfig.messagingSenderId,
+      appId: firebaseConfig.appId
+    });
     
     // Get Firestore instance, correctly handling named databases
     const dbId = firebaseConfig.firestoreDatabaseId || process.env.FIREBASE_FIRESTORE_DATABASE_ID || process.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID;
@@ -83,13 +96,14 @@ try {
     }
     
     if (db) {
-      console.log("Firestore Admin instance created successfully.");
+      console.log("Firestore Client instance created successfully.");
       
       // Test Firestore connection at startup
       const testConnection = async () => {
         try {
           console.log("Testing Firestore connection...");
-          await db.collection('system').doc('health').get();
+          const healthRef = doc(db, 'system', 'health');
+          await getDoc(healthRef);
           console.log("Firestore connection successful.");
         } catch (error) {
           console.warn("Firestore health check warning (this is normal if 'system/health' doc doesn't exist):", error instanceof Error ? error.message : error);
@@ -101,7 +115,7 @@ try {
     }
   }
 } catch (e) {
-  console.error("Error during Firebase Admin initialization:", e);
+  console.error("Error during Firebase initialization:", e);
 }
 
 const getPlayerChips = async (name: string, password?: string, ignorePassword = false): Promise<{ chips: number, last_spin: number, error?: string }> => {
@@ -109,10 +123,10 @@ const getPlayerChips = async (name: string, password?: string, ignorePassword = 
     return { chips: 0, last_spin: 0, error: 'Database connection error. Please try again later.' };
   }
   try {
-    const playerRef = db.collection('players').doc(name);
-    const playerSnap = await playerRef.get();
+    const playerRef = doc(db, 'players', name);
+    const playerSnap = await getDoc(playerRef);
     
-    if (playerSnap.exists) {
+    if (playerSnap.exists()) {
       const data = playerSnap.data() as any;
       
       // If ignorePassword is true, we are doing an internal update (like spin or admin)
@@ -130,7 +144,7 @@ const getPlayerChips = async (name: string, password?: string, ignorePassword = 
         }
       } else if (password && typeof password === 'string' && password.trim() !== "") {
         // If the account has NO password, but the user provided one, SET it now (claiming the account)
-        await playerRef.update({ password: password.trim() });
+        await updateDoc(playerRef, { password: password.trim() });
       }
       
       return { chips: (data.chips !== undefined) ? Number(data.chips) : 50000000, last_spin: data.last_spin || 0 };
@@ -143,7 +157,7 @@ const getPlayerChips = async (name: string, password?: string, ignorePassword = 
       last_spin: 0,
       password: (password && password.trim() !== "") ? password.trim() : ''
     };
-    await playerRef.set(newData);
+    await setDoc(playerRef, newData);
     return { chips: initialChips, last_spin: 0 };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
@@ -159,8 +173,8 @@ const updatePlayerChips = async (name: string, chips: number) => {
     return;
   }
   try {
-    const playerRef = db.collection('players').doc(name);
-    await playerRef.update({ chips });
+    const playerRef = doc(db, 'players', name);
+    await updateDoc(playerRef, { chips });
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error('Firestore Update Error:', error);
@@ -174,8 +188,8 @@ const updateLastSpin = async (name: string, time: number) => {
     return;
   }
   try {
-    const playerRef = db.collection('players').doc(name);
-    await playerRef.update({ last_spin: time });
+    const playerRef = doc(db, 'players', name);
+    await updateDoc(playerRef, { last_spin: time });
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error('Firestore Spin Error:', error);
@@ -207,10 +221,10 @@ async function startServer() {
     }
     try {
       console.log("Manual DB test requested...");
-      const snap = await db.collection('system').doc('health').get();
+      const snap = await getDoc(doc(db, 'system', 'health'));
       res.json({ 
         status: "connected", 
-        exists: snap.exists, 
+        exists: snap.exists(), 
         projectId: firebaseConfig.projectId, 
         databaseId: firebaseConfig.firestoreDatabaseId || "(default)"
       });
@@ -723,7 +737,8 @@ async function startServer() {
       }
       try {
         // Limit to top 100 players to avoid performance issues and timeouts
-        const querySnapshot = await db.collection('players').orderBy('chips', 'desc').limit(100).get();
+        const q = query(collection(db, 'players'), orderBy('chips', 'desc'), limit(100));
+        const querySnapshot = await getDocs(q);
         const stats: any[] = [];
         querySnapshot.forEach((d: any) => {
           stats.push({ name: d.id, chips: d.data().chips });
@@ -756,8 +771,8 @@ async function startServer() {
             return;
           }
           try {
-            const querySnapshot = await db.collection('players').get();
-            const batch = db.batch();
+            const querySnapshot = await getDocs(collection(db, 'players'));
+            const batch = writeBatch(db);
             querySnapshot.docs.forEach((d: any) => {
               batch.update(d.ref, { chips: 50000000 });
             });
@@ -786,33 +801,33 @@ async function startServer() {
           return;
         }
 
-        const playerRef = db.collection('players').doc(target);
+        const playerRef = doc(db, 'players', target);
         try {
-          const snap = await playerRef.get();
+          const snap = await getDoc(playerRef);
           
           if (type === "add") {
             const add = Number(amount) || 0;
-            if (snap.exists) {
+            if (snap.exists()) {
               const currentChips = Number((snap.data() as any).chips) || 0;
               const newChips = currentChips + add;
-              await playerRef.update({ chips: newChips });
+              await updateDoc(playerRef, { chips: newChips });
             } else {
-              await playerRef.set({ name: target, chips: add, last_spin: 0, password: '' });
+              await setDoc(playerRef, { name: target, chips: add, last_spin: 0, password: '' });
             }
           } else if (type === "reset") {
-            await playerRef.update({ chips: 50000000 });
+            await updateDoc(playerRef, { chips: 50000000 });
           } else if (type === "set") {
             const setVal = Number(amount) || 0;
-            if (snap.exists) {
-              await playerRef.update({ chips: setVal });
+            if (snap.exists()) {
+              await updateDoc(playerRef, { chips: setVal });
             } else {
-              await playerRef.set({ name: target, chips: setVal, last_spin: 0, password: '' });
+              await setDoc(playerRef, { name: target, chips: setVal, last_spin: 0, password: '' });
             }
           }
 
           // Update active players in rooms
-          const updatedSnap = await playerRef.get();
-          if (updatedSnap.exists) {
+          const updatedSnap = await getDoc(playerRef);
+          if (updatedSnap.exists()) {
             const updatedChips = Number((updatedSnap.data() as any).chips);
             Object.keys(rooms).forEach(r => {
               const p = rooms[r].players.find((pl: any) => pl.name === target);
