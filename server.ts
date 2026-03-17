@@ -27,7 +27,9 @@ import {
   orderBy, 
   limit, 
   getDocs, 
-  writeBatch
+  writeBatch,
+  initializeFirestore,
+  getDocFromServer
 } from 'firebase/firestore';
 
 dotenv.config();
@@ -95,12 +97,17 @@ try {
     // Get Firestore instance, correctly handling named databases
     const dbId = firebaseConfig.firestoreDatabaseId || process.env.FIREBASE_FIRESTORE_DATABASE_ID || process.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID;
     
+    // Use initializeFirestore with settings to force long polling, which is more reliable in server environments
+    const firestoreSettings = {
+      experimentalForceLongPolling: true,
+    };
+
     if (dbId) {
       console.log("Using Named Database ID:", dbId);
-      db = getFirestore(app, dbId);
+      db = initializeFirestore(app, firestoreSettings, dbId);
     } else {
       console.log("Using Default Database");
-      db = getFirestore(app);
+      db = initializeFirestore(app, firestoreSettings);
     }
     
     if (db) {
@@ -109,12 +116,17 @@ try {
       // Test Firestore connection at startup
       const testConnection = async () => {
         try {
-          console.log("Testing Firestore connection...");
+          console.log("Testing Firestore connection with getDocFromServer...");
           const healthRef = doc(db, 'system', 'health');
-          await getDoc(healthRef);
+          await getDocFromServer(healthRef);
           console.log("Firestore connection successful.");
         } catch (error) {
-          console.warn("Firestore health check warning (this is normal if 'system/health' doc doesn't exist):", error instanceof Error ? error.message : error);
+          const msg = error instanceof Error ? error.message : String(error);
+          if (msg.includes('the client is offline')) {
+            console.error("CRITICAL: Firestore configuration is incorrect (Client is offline). Please check your API Key and Project ID.");
+          } else {
+            console.warn("Firestore health check warning (this is normal if 'system/health' doc doesn't exist):", msg);
+          }
         }
       };
       testConnection();
@@ -128,7 +140,13 @@ try {
 
 const getPlayerChips = async (name: string, password?: string, ignorePassword = false): Promise<{ chips: number, last_spin: number, error?: string }> => {
   if (!db) {
-    return { chips: 0, last_spin: 0, error: 'Database connection error. Please try again later.' };
+    const projectId = firebaseConfig?.projectId || process.env.FIREBASE_PROJECT_ID;
+    const apiKey = firebaseConfig?.apiKey || process.env.FIREBASE_API_KEY;
+    let detail = "Database not initialized.";
+    if (!projectId || !apiKey) {
+      detail = "Firebase configuration (Project ID or API Key) is missing in the environment.";
+    }
+    return { chips: 0, last_spin: 0, error: `Database connection error: ${detail} Please check your environment variables.` };
   }
   try {
     const playerRef = doc(db, 'players', name);
