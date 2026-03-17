@@ -4,8 +4,7 @@ import { Server } from "socket.io";
 import { readFileSync } from "fs";
 import path from "path";
 import { fileURLToPath } from 'url';
-import { initializeApp } from 'firebase/app';
-import { doc, getDoc, setDoc, updateDoc, collection, getDocs, query, orderBy, getDocFromServer, limit, initializeFirestore } from 'firebase/firestore';
+import admin from 'firebase-admin';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -36,36 +35,32 @@ if (!firebaseConfig.apiKey) {
   console.error("CRITICAL: Firebase configuration is missing! Please set FIREBASE_API_KEY etc.");
 }
 
-const firebaseApp = initializeApp(firebaseConfig);
-// Use initializeFirestore with long polling to prevent "Disconnecting idle stream" errors
-const db = initializeFirestore(firebaseApp, {
-  experimentalForceLongPolling: true,
-  experimentalAutoDetectLongPolling: false,
-}, firebaseConfig.firestoreDatabaseId || undefined);
+// Initialize Firebase Admin
+admin.initializeApp({
+  projectId: firebaseConfig.projectId,
+});
+
+const db = admin.firestore(firebaseConfig.firestoreDatabaseId || undefined);
 
 // Test Firestore connection at startup
 async function testConnection() {
   try {
     console.log("Testing Firestore connection...");
-    await getDocFromServer(doc(db, 'system', 'health'));
+    await db.collection('system').doc('health').get();
     console.log("Firestore connection successful.");
   } catch (error) {
-    if (error instanceof Error && error.message.includes('offline')) {
-      console.error("CRITICAL: Firestore is OFFLINE. Database operations will fail.");
-    } else {
-      console.warn("Firestore health check warning (this is normal if 'system/health' doc doesn't exist):", error instanceof Error ? error.message : error);
-    }
+    console.warn("Firestore health check warning (this is normal if 'system/health' doc doesn't exist):", error instanceof Error ? error.message : error);
   }
 }
 testConnection();
 
 const getPlayerChips = async (name: string, password?: string, ignorePassword = false): Promise<{ chips: number, last_spin: number, error?: string }> => {
   try {
-    const playerRef = doc(db, 'players', name);
-    const playerSnap = await getDoc(playerRef);
+    const playerRef = db.collection('players').doc(name);
+    const playerSnap = await playerRef.get();
     
-    if (playerSnap.exists()) {
-      const data = playerSnap.data();
+    if (playerSnap.exists) {
+      const data = playerSnap.data() as any;
       
       // If ignorePassword is true, we are doing an internal update (like spin or admin)
       if (ignorePassword) {
@@ -82,7 +77,7 @@ const getPlayerChips = async (name: string, password?: string, ignorePassword = 
         }
       } else if (password && typeof password === 'string' && password.trim() !== "") {
         // If the account has NO password, but the user provided one, SET it now (claiming the account)
-        await updateDoc(playerRef, { password: password.trim() });
+        await playerRef.update({ password: password.trim() });
       }
       
       return { chips: (data.chips !== undefined) ? Number(data.chips) : 50000000, last_spin: data.last_spin || 0 };
@@ -95,7 +90,7 @@ const getPlayerChips = async (name: string, password?: string, ignorePassword = 
       last_spin: 0,
       password: (password && password.trim() !== "") ? password.trim() : ''
     };
-    await setDoc(playerRef, newData);
+    await playerRef.set(newData);
     return { chips: initialChips, last_spin: 0 };
   } catch (error) {
     console.error('Firestore Error in getPlayerChips:', error);
@@ -106,8 +101,8 @@ const getPlayerChips = async (name: string, password?: string, ignorePassword = 
 
 const updatePlayerChips = async (name: string, chips: number) => {
   try {
-    const playerRef = doc(db, 'players', name);
-    await updateDoc(playerRef, { chips });
+    const playerRef = db.collection('players').doc(name);
+    await playerRef.update({ chips });
   } catch (error) {
     console.error('Firestore Update Error:', error);
   }
@@ -115,8 +110,8 @@ const updatePlayerChips = async (name: string, chips: number) => {
 
 const updateLastSpin = async (name: string, time: number) => {
   try {
-    const playerRef = doc(db, 'players', name);
-    await updateDoc(playerRef, { last_spin: time });
+    const playerRef = db.collection('players').doc(name);
+    await playerRef.update({ last_spin: time });
   } catch (error) {
     console.error('Firestore Spin Error:', error);
   }
@@ -634,8 +629,7 @@ async function startServer() {
     const refreshAdminStats = async () => {
       try {
         // Limit to top 100 players to avoid performance issues and timeouts
-        const q = query(collection(db, 'players'), orderBy('chips', 'desc'), limit(100));
-        const querySnapshot = await getDocs(q);
+        const querySnapshot = await db.collection('players').orderBy('chips', 'desc').limit(100).get();
         const stats: any[] = [];
         querySnapshot.forEach((doc) => {
           stats.push({ name: doc.id, chips: doc.data().chips });
@@ -664,8 +658,8 @@ async function startServer() {
         console.log(`Admin Action: ${type} on ${targetName} with amount ${amount}`);
         if (type === "resetAll") {
           try {
-            const querySnapshot = await getDocs(collection(db, 'players'));
-            const promises = querySnapshot.docs.map(d => updateDoc(d.ref, { chips: 50000000 }));
+            const querySnapshot = await db.collection('players').get();
+            const promises = querySnapshot.docs.map(d => d.ref.update({ chips: 50000000 }));
             await Promise.all(promises);
             
             Object.keys(rooms).forEach(r => {
@@ -686,34 +680,34 @@ async function startServer() {
         const target = targetName?.trim();
         if (!target) return;
 
-        const playerRef = doc(db, 'players', target);
+        const playerRef = db.collection('players').doc(target);
         try {
-          const snap = await getDoc(playerRef);
+          const snap = await playerRef.get();
           
           if (type === "add") {
             const add = Number(amount) || 0;
-            if (snap.exists()) {
-              const currentChips = Number(snap.data().chips) || 0;
+            if (snap.exists) {
+              const currentChips = Number((snap.data() as any).chips) || 0;
               const newChips = currentChips + add;
-              await updateDoc(playerRef, { chips: newChips });
+              await playerRef.update({ chips: newChips });
             } else {
-              await setDoc(playerRef, { name: target, chips: add, last_spin: 0, password: '' });
+              await playerRef.set({ name: target, chips: add, last_spin: 0, password: '' });
             }
           } else if (type === "reset") {
-            await updateDoc(playerRef, { chips: 50000000 });
+            await playerRef.update({ chips: 50000000 });
           } else if (type === "set") {
             const setVal = Number(amount) || 0;
-            if (snap.exists()) {
-              await updateDoc(playerRef, { chips: setVal });
+            if (snap.exists) {
+              await playerRef.update({ chips: setVal });
             } else {
-              await setDoc(playerRef, { name: target, chips: setVal, last_spin: 0, password: '' });
+              await playerRef.set({ name: target, chips: setVal, last_spin: 0, password: '' });
             }
           }
 
           // Update active players in rooms
-          const updatedSnap = await getDoc(playerRef);
-          if (updatedSnap.exists()) {
-            const updatedChips = Number(updatedSnap.data().chips);
+          const updatedSnap = await playerRef.get();
+          if (updatedSnap.exists) {
+            const updatedChips = Number((updatedSnap.data() as any).chips);
             Object.keys(rooms).forEach(r => {
               const p = rooms[r].players.find((pl: any) => pl.name === target);
               if (p) {
