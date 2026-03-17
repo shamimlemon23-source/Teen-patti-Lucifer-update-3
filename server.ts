@@ -5,7 +5,7 @@ import { readFileSync } from "fs";
 import path from "path";
 import { fileURLToPath } from 'url';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs, query, orderBy, getDocFromServer, limit, initializeFirestore } from 'firebase/firestore';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -37,7 +37,26 @@ if (!firebaseConfig.apiKey) {
 }
 
 const firebaseApp = initializeApp(firebaseConfig);
-const db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId || undefined);
+// Use initializeFirestore with long polling to prevent "Disconnecting idle stream" errors
+const db = initializeFirestore(firebaseApp, {
+  experimentalForceLongPolling: true,
+}, firebaseConfig.firestoreDatabaseId || undefined);
+
+// Test Firestore connection at startup
+async function testConnection() {
+  try {
+    console.log("Testing Firestore connection...");
+    await getDocFromServer(doc(db, 'system', 'health'));
+    console.log("Firestore connection successful.");
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('offline')) {
+      console.error("CRITICAL: Firestore is OFFLINE. Database operations will fail.");
+    } else {
+      console.warn("Firestore health check warning (this is normal if 'system/health' doc doesn't exist):", error instanceof Error ? error.message : error);
+    }
+  }
+}
+testConnection();
 
 const getPlayerChips = async (name: string, password?: string, ignorePassword = false): Promise<{ chips: number, last_spin: number, error?: string }> => {
   try {
@@ -53,11 +72,14 @@ const getPlayerChips = async (name: string, password?: string, ignorePassword = 
       }
 
       // If the account HAS a password, we MUST verify it.
-      if (data.password && data.password.trim() !== "") {
-        if (!password || data.password.trim() !== password.trim()) {
+      if (data.password && String(data.password).trim() !== "") {
+        const storedPass = String(data.password).trim();
+        const providedPass = (password && typeof password === 'string') ? password.trim() : "";
+        
+        if (providedPass === "" || storedPass !== providedPass) {
           return { chips: 0, last_spin: 0, error: 'Incorrect password for this name!' };
         }
-      } else if (password && password.trim() !== "") {
+      } else if (password && typeof password === 'string' && password.trim() !== "") {
         // If the account has NO password, but the user provided one, SET it now (claiming the account)
         await updateDoc(playerRef, { password: password.trim() });
       }
@@ -76,7 +98,8 @@ const getPlayerChips = async (name: string, password?: string, ignorePassword = 
     return { chips: initialChips, last_spin: 0 };
   } catch (error) {
     console.error('Firestore Error in getPlayerChips:', error);
-    return { chips: 50000000, last_spin: 0 };
+    // CRITICAL: Do not allow login if Firestore is failing, otherwise password check is bypassed
+    return { chips: 0, last_spin: 0, error: 'Database connection error. Please try again later.' };
   }
 };
 
@@ -609,7 +632,8 @@ async function startServer() {
 
     const refreshAdminStats = async () => {
       try {
-        const q = query(collection(db, 'players'), orderBy('chips', 'desc'));
+        // Limit to top 100 players to avoid performance issues and timeouts
+        const q = query(collection(db, 'players'), orderBy('chips', 'desc'), limit(100));
         const querySnapshot = await getDocs(q);
         const stats: any[] = [];
         querySnapshot.forEach((doc) => {
@@ -618,6 +642,7 @@ async function startServer() {
         socket.emit("adminStats", stats);
       } catch (error) {
         console.error('Admin Stats Error:', error);
+        socket.emit("adminMessage", "Error loading player stats. Database might be busy.");
       }
     };
 
@@ -701,7 +726,12 @@ async function startServer() {
           socket.emit("adminMessage", `Action ${type} successful for ${target}`);
         } catch (error) {
           console.error('Admin Action Error:', error);
-          socket.emit("adminMessage", `Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+          if (errorMsg.includes('offline')) {
+            socket.emit("adminMessage", "Database is offline. Please check server connection.");
+          } else {
+            socket.emit("adminMessage", `Error: ${errorMsg}`);
+          }
         }
       } else {
         socket.emit("adminMessage", "Unauthorized Admin Action Attempted");
