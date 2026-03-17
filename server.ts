@@ -4,9 +4,8 @@ import { Server } from "socket.io";
 import { readFileSync } from "fs";
 import path from "path";
 import { fileURLToPath } from 'url';
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
-const admin = require('firebase-admin');
+import { initializeApp } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -38,11 +37,11 @@ if (!firebaseConfig.apiKey) {
 }
 
 // Initialize Firebase Admin
-admin.initializeApp({
+initializeApp({
   projectId: firebaseConfig.projectId,
 });
 
-const db = admin.firestore(firebaseConfig.firestoreDatabaseId || undefined);
+const db = getFirestore(firebaseConfig.firestoreDatabaseId || undefined);
 
 // Test Firestore connection at startup
 async function testConnection() {
