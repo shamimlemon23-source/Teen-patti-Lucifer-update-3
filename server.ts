@@ -5,7 +5,7 @@ import { readFileSync } from "fs";
 import path from "path";
 import { fileURLToPath } from 'url';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
+import { initializeFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs, query, orderBy, limit, connectFirestoreEmulator } from 'firebase/firestore';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -43,9 +43,17 @@ if (!firebaseConfig.apiKey) {
 let db: any;
 try {
   console.log("Initializing Firebase with Project ID:", firebaseConfig.projectId);
+  console.log("Using Database ID:", firebaseConfig.firestoreDatabaseId || "(default)");
   const app = initializeApp(firebaseConfig);
   console.log("Firebase initialized.");
-  db = getFirestore(app, firebaseConfig.firestoreDatabaseId || undefined);
+  
+  // Use initializeFirestore instead of getFirestore to pass settings
+  // experimentalForceLongPolling: true is often needed in server-side Node.js 
+  // or restricted network environments to avoid gRPC/stream issues.
+  db = initializeFirestore(app, {
+    experimentalForceLongPolling: true,
+  }, firebaseConfig.firestoreDatabaseId || undefined);
+  
   console.log("Firestore instance created for database:", firebaseConfig.firestoreDatabaseId || "(default)");
 
   // Test Firestore connection at startup
