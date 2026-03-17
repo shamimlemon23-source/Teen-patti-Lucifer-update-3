@@ -135,6 +135,7 @@ export default function App() {
   const [manualName, setManualName] = useState('');
   const [manualAmount, setManualAmount] = useState('50000000');
   const [adminStats, setAdminStats] = useState<any[]>([]);
+  const [adminSearch, setAdminSearch] = useState('');
   const [adminMessage, setAdminMessage] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [showSplash, setShowSplash] = useState(true);
@@ -868,17 +869,37 @@ export default function App() {
                     <p className="text-[10px] text-white/20 uppercase font-bold">Press Enter to Unlock</p>
                   </div>
                 ) : adminTab === 'players' ? (
-                  adminStats.map((stat, i) => (
-                    <div key={stat.name || i} className="flex items-center justify-between p-2 md:p-4 bg-white/5 border border-white/5 rounded-xl md:rounded-2xl">
-                      <div className="flex items-center gap-2 md:gap-3"><span className="text-xs md:text-base font-bold">{stat.name}</span></div>
-                      <div className="flex items-center gap-2 md:gap-4">
-                        <div className="flex items-center gap-1 md:gap-2 text-yellow-500 font-black text-[10px] md:text-base"><Coins className="w-3 h-3 md:w-4 md:h-4" />{Number(stat.chips).toLocaleString()}</div>
-                        <button onClick={() => handleAdminAdd(stat.name)} className="p-1.5 md:p-2 bg-green-600/10 hover:bg-green-600/20 border border-green-500/20 rounded-lg text-green-500 text-[8px] md:text-[10px] font-black uppercase">Add</button>
-                        <button onClick={() => handleAdminSet(stat.name)} className="p-1.5 md:p-2 bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/20 rounded-lg text-blue-500 text-[8px] md:text-[10px] font-black uppercase">Set</button>
-                        <button onClick={() => adminAction(stat.name, 'reset')} className="p-1.5 md:p-2 bg-red-600/10 hover:bg-red-600/20 border border-red-500/20 rounded-lg text-red-500 text-[8px] md:text-[10px] font-black uppercase">Reset</button>
-                      </div>
+                  <div className="space-y-4">
+                    <div className="relative">
+                      <input 
+                        type="text" 
+                        value={adminSearch} 
+                        onChange={e => setAdminSearch(e.target.value)} 
+                        placeholder="Search players..." 
+                        className="w-full bg-black/40 border border-white/10 p-3 rounded-xl outline-none pl-10 text-sm"
+                      />
+                      <Users className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
                     </div>
-                  ))
+                    
+                    <div className="space-y-2">
+                      {adminStats
+                        .filter(s => s.name.toLowerCase().includes(adminSearch.toLowerCase()))
+                        .map((stat, i) => (
+                          <div key={stat.name || i} className="flex items-center justify-between p-2 md:p-4 bg-white/5 border border-white/5 rounded-xl md:rounded-2xl">
+                            <div className="flex items-center gap-2 md:gap-3"><span className="text-xs md:text-base font-bold">{stat.name}</span></div>
+                            <div className="flex items-center gap-2 md:gap-4">
+                              <div className="flex items-center gap-1 md:gap-2 text-yellow-500 font-black text-[10px] md:text-base"><Coins className="w-3 h-3 md:w-4 md:h-4" />{Number(stat.chips).toLocaleString()}</div>
+                              <button onClick={() => handleAdminAdd(stat.name)} className="p-1.5 md:p-2 bg-green-600/10 hover:bg-green-600/20 border border-green-500/20 rounded-lg text-green-500 text-[8px] md:text-[10px] font-black uppercase">Add</button>
+                              <button onClick={() => handleAdminSet(stat.name)} className="p-1.5 md:p-2 bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/20 rounded-lg text-blue-500 text-[8px] md:text-[10px] font-black uppercase">Set</button>
+                              <button onClick={() => adminAction(stat.name, 'reset')} className="p-1.5 md:p-2 bg-red-600/10 hover:bg-red-600/20 border border-red-500/20 rounded-lg text-red-500 text-[8px] md:text-[10px] font-black uppercase">Reset</button>
+                            </div>
+                          </div>
+                        ))}
+                      {adminStats.length === 0 && (
+                        <div className="text-center py-8 text-white/20 uppercase font-black tracking-widest">No players found</div>
+                      )}
+                    </div>
+                  </div>
                 ) : (
                   <div className="space-y-4">
                     <input type="text" value={manualName} onChange={e => setManualName(e.target.value)} placeholder="Player Name" className="w-full bg-black/40 border border-white/10 p-4 rounded-xl outline-none" />
