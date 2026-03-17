@@ -46,12 +46,22 @@ const getPlayerChips = async (name: string, password?: string, ignorePassword = 
     
     if (playerSnap.exists()) {
       const data = playerSnap.data();
-      // If player has a password, we MUST check it, unless ignorePassword is true (internal use)
-      if (!ignorePassword && data.password && data.password.trim() !== "") {
-        if (!password || data.password !== password) {
+      
+      // If ignorePassword is true, we are doing an internal update (like spin or admin)
+      if (ignorePassword) {
+        return { chips: (data.chips !== undefined) ? Number(data.chips) : 50000000, last_spin: data.last_spin || 0 };
+      }
+
+      // If the account HAS a password, we MUST verify it.
+      if (data.password && data.password.trim() !== "") {
+        if (!password || data.password.trim() !== password.trim()) {
           return { chips: 0, last_spin: 0, error: 'Incorrect password for this name!' };
         }
+      } else if (password && password.trim() !== "") {
+        // If the account has NO password, but the user provided one, SET it now (claiming the account)
+        await updateDoc(playerRef, { password: password.trim() });
       }
+      
       return { chips: (data.chips !== undefined) ? Number(data.chips) : 50000000, last_spin: data.last_spin || 0 };
     }
     
@@ -60,12 +70,12 @@ const getPlayerChips = async (name: string, password?: string, ignorePassword = 
       name,
       chips: initialChips,
       last_spin: 0,
-      password: password || ''
+      password: (password && password.trim() !== "") ? password.trim() : ''
     };
     await setDoc(playerRef, newData);
     return { chips: initialChips, last_spin: 0 };
   } catch (error) {
-    console.error('Firestore Error:', error);
+    console.error('Firestore Error in getPlayerChips:', error);
     return { chips: 50000000, last_spin: 0 };
   }
 };
@@ -612,7 +622,7 @@ async function startServer() {
     };
 
     socket.on("getAdminStats", async ({ adminName, adminPassword }) => {
-      if (adminName?.trim() === "LUCIFER_DEV_777" && adminPassword === "LUCIFER_PASS_999") {
+      if (adminName?.trim().toUpperCase() === "LUCIFER_DEV_777" && adminPassword === "LUCIFER_PASS_999") {
         await refreshAdminStats();
       } else {
         socket.emit("adminMessage", "Invalid Admin Credentials");
@@ -620,7 +630,11 @@ async function startServer() {
     });
 
     socket.on("adminAction", async ({ adminName, adminPassword, type, targetName, amount }) => {
-      if (adminName?.trim() === "LUCIFER_DEV_777" && adminPassword === "LUCIFER_PASS_999") {
+      // Robust admin check
+      const isAdminName = adminName?.trim().toUpperCase() === "LUCIFER_DEV_777";
+      const isAdminPass = adminPassword === "LUCIFER_PASS_999";
+
+      if (isAdminName && isAdminPass) {
         console.log(`Admin Action: ${type} on ${targetName} with amount ${amount}`);
         if (type === "resetAll") {
           try {
@@ -638,6 +652,7 @@ async function startServer() {
             socket.emit("adminMessage", "All players reset to 5 Cr");
           } catch (error) {
             console.error('Admin Reset All Error:', error);
+            socket.emit("adminMessage", "Error resetting all players");
           }
           return;
         }
@@ -647,11 +662,13 @@ async function startServer() {
 
         const playerRef = doc(db, 'players', target);
         try {
+          const snap = await getDoc(playerRef);
+          
           if (type === "add") {
             const add = Number(amount) || 0;
-            const snap = await getDoc(playerRef);
             if (snap.exists()) {
-              const newChips = (Number(snap.data().chips) || 0) + add;
+              const currentChips = Number(snap.data().chips) || 0;
+              const newChips = currentChips + add;
               await updateDoc(playerRef, { chips: newChips });
             } else {
               await setDoc(playerRef, { name: target, chips: add, last_spin: 0, password: '' });
@@ -660,13 +677,17 @@ async function startServer() {
             await updateDoc(playerRef, { chips: 50000000 });
           } else if (type === "set") {
             const setVal = Number(amount) || 0;
-            await updateDoc(playerRef, { chips: setVal });
+            if (snap.exists()) {
+              await updateDoc(playerRef, { chips: setVal });
+            } else {
+              await setDoc(playerRef, { name: target, chips: setVal, last_spin: 0, password: '' });
+            }
           }
 
           // Update active players in rooms
           const updatedSnap = await getDoc(playerRef);
           if (updatedSnap.exists()) {
-            const updatedChips = updatedSnap.data().chips;
+            const updatedChips = Number(updatedSnap.data().chips);
             Object.keys(rooms).forEach(r => {
               const p = rooms[r].players.find((pl: any) => pl.name === target);
               if (p) {
@@ -680,53 +701,59 @@ async function startServer() {
           socket.emit("adminMessage", `Action ${type} successful for ${target}`);
         } catch (error) {
           console.error('Admin Action Error:', error);
-          socket.emit("adminMessage", "Error performing admin action");
+          socket.emit("adminMessage", `Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
+      } else {
+        socket.emit("adminMessage", "Unauthorized Admin Action Attempted");
       }
     });
 
     socket.on("spinWheel", async ({ name }) => {
-      const dbData = await getPlayerChips(name, undefined, true);
-      const now = Date.now();
-      const oneDay = 24 * 60 * 60 * 1000;
+      try {
+        const dbData = await getPlayerChips(name, undefined, true);
+        const now = Date.now();
+        const oneDay = 24 * 60 * 60 * 1000;
 
-      if (now - dbData.last_spin < oneDay) {
-        const remaining = oneDay - (now - dbData.last_spin);
-        const hours = Math.floor(remaining / (1000 * 60 * 60));
-        const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
-        return socket.emit("spinError", { message: `Wait ${hours}h ${minutes}m for next spin!` });
-      }
-
-      const options = [
-        { label: "1 COROR", value: 10000000 },
-        { label: "2 COROR", value: 20000000 },
-        { label: "5 COROR", value: 50000000 },
-        { label: "10 COROR", value: 100000000 },
-        { label: "20 COROR", value: 200000000 }
-      ];
-
-      const randomIndex = Math.floor(Math.random() * options.length);
-      const win = options[randomIndex];
-
-      const newChips = dbData.chips + win.value;
-      await updatePlayerChips(name, newChips);
-      await updateLastSpin(name, now);
-
-      // Update player in rooms
-      Object.keys(rooms).forEach(r => {
-        const p = rooms[r].players.find((pl: any) => pl.name === name);
-        if (p) {
-          p.chips = newChips;
-          emitGameState(r);
+        if (now - dbData.last_spin < oneDay) {
+          const remaining = oneDay - (now - dbData.last_spin);
+          const hours = Math.floor(remaining / (1000 * 60 * 60));
+          const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+          return socket.emit("spinError", { message: `Wait ${hours}h ${minutes}m for next spin!` });
         }
-      });
 
-      socket.emit("spinResult", { 
-        prize: win.label, 
-        chips: win.value, 
-        lastSpin: now 
-      });
+        const options = [
+          { label: "1 COROR", value: 10000000 },
+          { label: "2 COROR", value: 20000000 },
+          { label: "5 COROR", value: 50000000 },
+          { label: "10 COROR", value: 100000000 },
+          { label: "20 COROR", value: 200000000 }
+        ];
 
+        const randomIndex = Math.floor(Math.random() * options.length);
+        const win = options[randomIndex];
+
+        const newChips = dbData.chips + win.value;
+        await updatePlayerChips(name, newChips);
+        await updateLastSpin(name, now);
+
+        // Update player in rooms
+        Object.keys(rooms).forEach(r => {
+          const p = rooms[r].players.find((pl: any) => pl.name === name);
+          if (p) {
+            p.chips = newChips;
+            emitGameState(r);
+          }
+        });
+
+        socket.emit("spinResult", { 
+          prize: win.label, 
+          chips: win.value, 
+          lastSpin: now 
+        });
+      } catch (error) {
+        console.error('Spin Wheel Error:', error);
+        socket.emit("spinError", { message: "Internal Server Error during spin" });
+      }
     });
   });
 
