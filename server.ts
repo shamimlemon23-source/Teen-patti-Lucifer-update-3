@@ -4,8 +4,11 @@ import { Server } from "socket.io";
 import { readFileSync } from "fs";
 import path from "path";
 import { fileURLToPath } from 'url';
-import admin from 'firebase-admin';
+import { createRequire } from 'module';
 import dotenv from 'dotenv';
+
+const require = createRequire(import.meta.url);
+const admin = require('firebase-admin');
 
 dotenv.config();
 
@@ -41,40 +44,49 @@ if (!firebaseConfig.apiKey) {
 // Initialize Firebase
 let db: any;
 try {
-  console.log("Initializing Firebase Admin with Project ID:", firebaseConfig.projectId);
-  console.log("Using Database ID:", firebaseConfig.firestoreDatabaseId || "(default)");
+  const projectId = firebaseConfig.projectId || process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID;
   
-  if (!admin.apps.length) {
-    admin.initializeApp({
-      projectId: firebaseConfig.projectId,
-    });
-  }
-  
-  // Get Firestore instance, optionally specifying the database ID
-  if (firebaseConfig.firestoreDatabaseId) {
-    db = admin.firestore(firebaseConfig.firestoreDatabaseId);
+  if (!projectId) {
+    console.error("CRITICAL: Firebase Project ID is missing! Database will not work.");
   } else {
-    db = admin.firestore();
-  }
-  
-  console.log("Firestore Admin instance created.");
-
-  // Test Firestore connection at startup
-  const testConnection = async () => {
-    try {
-      console.log("Testing Firestore connection...");
-      await db.collection('system').doc('health').get();
-      console.log("Firestore connection successful.");
-    } catch (error) {
-      console.warn("Firestore health check warning (this is normal if 'system/health' doc doesn't exist):", error instanceof Error ? error.message : error);
+    console.log("Initializing Firebase Admin with Project ID:", projectId);
+    console.log("Using Database ID:", firebaseConfig.firestoreDatabaseId || "(default)");
+    
+    if (!admin.apps.length) {
+      admin.initializeApp({
+        projectId: projectId,
+      });
     }
-  };
-  testConnection();
+    
+    // Get Firestore instance, optionally specifying the database ID
+    if (firebaseConfig.firestoreDatabaseId) {
+      db = admin.firestore(firebaseConfig.firestoreDatabaseId);
+    } else {
+      db = admin.firestore();
+    }
+    
+    console.log("Firestore Admin instance created.");
+
+    // Test Firestore connection at startup
+    const testConnection = async () => {
+      try {
+        console.log("Testing Firestore connection...");
+        await db.collection('system').doc('health').get();
+        console.log("Firestore connection successful.");
+      } catch (error) {
+        console.warn("Firestore health check warning (this is normal if 'system/health' doc doesn't exist):", error instanceof Error ? error.message : error);
+      }
+    };
+    testConnection();
+  }
 } catch (e) {
   console.error("Error during Firebase Admin initialization:", e);
 }
 
 const getPlayerChips = async (name: string, password?: string, ignorePassword = false): Promise<{ chips: number, last_spin: number, error?: string }> => {
+  if (!db) {
+    return { chips: 0, last_spin: 0, error: 'Database connection error. Please try again later.' };
+  }
   try {
     const playerRef = db.collection('players').doc(name);
     const playerSnap = await playerRef.get();
@@ -121,6 +133,10 @@ const getPlayerChips = async (name: string, password?: string, ignorePassword = 
 };
 
 const updatePlayerChips = async (name: string, chips: number) => {
+  if (!db) {
+    console.warn('Cannot update chips: Database not connected');
+    return;
+  }
   try {
     const playerRef = db.collection('players').doc(name);
     await playerRef.update({ chips });
@@ -132,6 +148,10 @@ const updatePlayerChips = async (name: string, chips: number) => {
 };
 
 const updateLastSpin = async (name: string, time: number) => {
+  if (!db) {
+    console.warn('Cannot update last spin: Database not connected');
+    return;
+  }
   try {
     const playerRef = db.collection('players').doc(name);
     await playerRef.update({ last_spin: time });
@@ -161,6 +181,9 @@ async function startServer() {
   });
 
   app.get("/api/db-test", async (req, res) => {
+    if (!db) {
+      return res.status(503).json({ status: "error", message: "Database not initialized" });
+    }
     try {
       console.log("Manual DB test requested...");
       const snap = await db.collection('system').doc('health').get();
@@ -673,6 +696,10 @@ async function startServer() {
     });
 
     const refreshAdminStats = async () => {
+      if (!db) {
+        socket.emit("adminMessage", "Database connection error. Stats unavailable.");
+        return;
+      }
       try {
         // Limit to top 100 players to avoid performance issues and timeouts
         const querySnapshot = await db.collection('players').orderBy('chips', 'desc').limit(100).get();
@@ -703,6 +730,10 @@ async function startServer() {
       if (isAdminName && isAdminPass) {
         console.log(`Admin Action: ${type} on ${targetName} with amount ${amount}`);
         if (type === "resetAll") {
+          if (!db) {
+            socket.emit("adminMessage", "Database connection error. Reset failed.");
+            return;
+          }
           try {
             const querySnapshot = await db.collection('players').get();
             const batch = db.batch();
@@ -728,6 +759,11 @@ async function startServer() {
 
         const target = targetName?.trim();
         if (!target) return;
+
+        if (!db) {
+          socket.emit("adminMessage", "Database connection error. Action failed.");
+          return;
+        }
 
         const playerRef = db.collection('players').doc(target);
         try {
