@@ -5,7 +5,7 @@ import { readFileSync } from "fs";
 import path from "path";
 import { fileURLToPath } from 'url';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, getDoc, setDoc, updateDoc, collection, getDocs, query, orderBy, getDocFromServer, limit, initializeFirestore } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, collection, getDocs, query, orderBy, getDocFromServer, limit, initializeFirestore } from 'firebase/firestore';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -40,6 +40,7 @@ const firebaseApp = initializeApp(firebaseConfig);
 // Use initializeFirestore with long polling to prevent "Disconnecting idle stream" errors
 const db = initializeFirestore(firebaseApp, {
   experimentalForceLongPolling: true,
+  experimentalAutoDetectLongPolling: false,
 }, firebaseConfig.firestoreDatabaseId || undefined);
 
 // Test Firestore connection at startup
