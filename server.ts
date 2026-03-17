@@ -6,8 +6,10 @@ import path from "path";
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 import dotenv from 'dotenv';
-import { initializeApp } from 'firebase/app';
-import { 
+
+const require = createRequire(import.meta.url);
+const { initializeApp } = require('firebase/app');
+const { 
   getFirestore, 
   collection, 
   doc, 
@@ -19,9 +21,7 @@ import {
   limit, 
   getDocs, 
   writeBatch
-} from 'firebase/firestore';
-
-const require = createRequire(import.meta.url);
+} = require('firebase/firestore');
 
 dotenv.config();
 
@@ -59,6 +59,7 @@ try {
 } catch (e) {
   console.warn("Falling back to environment variables for Firebase config. Error:", e instanceof Error ? e.message : e);
   firebaseConfig = {
+    apiKey: process.env.FIREBASE_API_KEY || process.env.VITE_FIREBASE_API_KEY,
     projectId: process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID,
     firestoreDatabaseId: process.env.FIREBASE_FIRESTORE_DATABASE_ID || process.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID
   };
