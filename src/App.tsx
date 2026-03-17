@@ -148,16 +148,19 @@ export default function App() {
   const [gameNotification, setGameNotification] = useState<string | null>(null);
   const [lastSpinTime, setLastSpinTime] = useState<number>(0);
 
-  const isAdmin = useMemo(() => name.trim() === 'LUCIFER_DEV_777', [name]);
+  const isAdmin = useMemo(() => name.trim().toUpperCase() === 'LUCIFER_DEV_777', [name]);
 
   useEffect(() => {
     if (socket) {
       socket.on('spinResult', (data: { prize: string, chips: number, lastSpin: number }) => {
-        setIsSpinning(false);
-        setSpinResult(data.prize);
-        setLastSpinTime(data.lastSpin);
-        confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 } });
-        setTimeout(() => setSpinResult(null), 5000);
+        // Small delay to let the animation feel better before showing result
+        setTimeout(() => {
+          setIsSpinning(false);
+          setSpinResult(data.prize);
+          setLastSpinTime(data.lastSpin);
+          confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 } });
+          setTimeout(() => setSpinResult(null), 5000);
+        }, 500);
       });
 
       socket.on('spinError', (data: { message: string }) => {
@@ -226,7 +229,8 @@ export default function App() {
     newSocket.on('connect', () => {
       setIsConnected(true);
       if (name) {
-        newSocket.emit('joinRoom', { roomId, name });
+        // Include password on reconnection to avoid being kicked out
+        newSocket.emit('joinRoom', { roomId, name, password });
       }
     });
     
@@ -311,17 +315,8 @@ export default function App() {
   };
 
   const openAdminPanel = () => {
-    if (!adminPassword) {
-      const pass = prompt("Enter Admin Password:");
-      if (pass === "LUCIFER_PASS_999") {
-        setAdminPassword(pass);
-        setShowAdminPanel(true);
-        socket?.emit('getAdminStats', { adminName: name, adminPassword: pass });
-      } else {
-        alert("Incorrect Password!");
-      }
-    } else {
-      setShowAdminPanel(true);
+    setShowAdminPanel(true);
+    if (adminPassword) {
       socket?.emit('getAdminStats', { adminName: name, adminPassword });
     }
   };
@@ -828,7 +823,15 @@ export default function App() {
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowAdminPanel(false)} className="absolute inset-0 bg-black/90 backdrop-blur-sm" />
             <motion.div initial={{ scale: 0.9, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0, y: 20 }} className="relative w-full max-w-2xl bg-[#1a1a1a] border border-white/10 rounded-2xl md:rounded-[2rem] overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
               <div className="p-3 md:p-6 border-b border-white/5 flex items-center justify-between bg-zinc-900/50">
-                <div className="flex items-center gap-2 md:gap-3"><Trophy className="w-4 h-4 md:w-6 md:h-6 text-red-500" /><h2 className="text-sm md:text-xl font-black uppercase tracking-tighter">Lucifer Dashboard</h2></div>
+                <div className="flex items-center gap-2 md:gap-3">
+                  <Trophy className="w-4 h-4 md:w-6 md:h-6 text-red-500" />
+                  <h2 className="text-sm md:text-xl font-black uppercase tracking-tighter">Lucifer Dashboard</h2>
+                  {adminMessage && (
+                    <motion.span initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="text-[10px] text-yellow-500 font-bold ml-2">
+                      {adminMessage}
+                    </motion.span>
+                  )}
+                </div>
                 <div className="flex items-center gap-1 md:gap-2">
                   <button onClick={() => setAdminTab('players')} className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase transition-all ${adminTab === 'players' ? 'bg-red-600 text-white' : 'bg-white/5 text-white/40'}`}>Players</button>
                   <button onClick={() => setAdminTab('manual')} className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase transition-all ${adminTab === 'manual' ? 'bg-red-600 text-white' : 'bg-white/5 text-white/40'}`}>Manual</button>
@@ -836,7 +839,35 @@ export default function App() {
                 </div>
               </div>
               <div className="flex-1 overflow-y-auto p-3 md:p-6 space-y-3 md:space-y-4">
-                {adminTab === 'players' ? (
+                {!adminPassword ? (
+                  <div className="flex flex-col items-center justify-center py-12 space-y-6">
+                    <div className="w-16 h-16 bg-red-600/20 rounded-2xl flex items-center justify-center">
+                      <Lock className="w-8 h-8 text-red-500" />
+                    </div>
+                    <div className="text-center">
+                      <h3 className="text-xl font-black uppercase">Authentication Required</h3>
+                      <p className="text-white/40 text-sm">Enter the underworld master key</p>
+                    </div>
+                    <input 
+                      type="password" 
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const val = (e.target as HTMLInputElement).value;
+                          if (val === "LUCIFER_PASS_999") {
+                            setAdminPassword(val);
+                            socket?.emit('getAdminStats', { adminName: name, adminPassword: val });
+                          } else {
+                            alert("Incorrect Password!");
+                          }
+                        }
+                      }}
+                      placeholder="Master Key" 
+                      className="w-full max-w-xs bg-black/40 border border-white/10 p-4 rounded-xl outline-none focus:border-red-500 transition-all text-center font-black tracking-widest" 
+                    />
+                    <p className="text-[10px] text-white/20 uppercase font-bold">Press Enter to Unlock</p>
+                  </div>
+                ) : adminTab === 'players' ? (
                   adminStats.map((stat, i) => (
                     <div key={stat.name || i} className="flex items-center justify-between p-2 md:p-4 bg-white/5 border border-white/5 rounded-xl md:rounded-2xl">
                       <div className="flex items-center gap-2 md:gap-3"><span className="text-xs md:text-base font-bold">{stat.name}</span></div>
