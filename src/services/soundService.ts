@@ -13,7 +13,8 @@ class SoundService {
   }
 
   private loadSounds() {
-    const soundFiles = {
+    // Local paths (preferred)
+    const localSounds = {
       shuffle: '/sounds/shuffle.mp3',
       deal: '/sounds/deal.mp3',
       bet: '/sounds/bet.mp3',
@@ -24,18 +25,46 @@ class SoundService {
       lose: '/sounds/lose.mp3',
     };
 
-    for (const [key, path] of Object.entries(soundFiles)) {
+    // Fallback public URLs (if local files are missing)
+    const fallbackSounds = {
+      shuffle: 'https://assets.mixkit.co/active_storage/sfx/2013/2013-preview.mp3',
+      deal: 'https://assets.mixkit.co/active_storage/sfx/2017/2017-preview.mp3',
+      bet: 'https://assets.mixkit.co/active_storage/sfx/2019/2019-preview.mp3',
+      flip: 'https://assets.mixkit.co/active_storage/sfx/2017/2017-preview.mp3',
+      click: 'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3',
+      fold: 'https://assets.mixkit.co/active_storage/sfx/2017/2017-preview.mp3',
+      win: 'https://assets.mixkit.co/active_storage/sfx/2018/2018-preview.mp3',
+      lose: 'https://assets.mixkit.co/active_storage/sfx/2012/2012-preview.mp3',
+    };
+
+    for (const [key, path] of Object.entries(localSounds)) {
       const audio = new Audio(path);
       audio.preload = 'auto';
-      audio.onerror = (e) => {
-        console.error(`Failed to load sound: ${key} at path: ${path}. Please ensure the file exists in public/sounds/ and the name matches exactly (case-sensitive).`);
+      
+      audio.onerror = () => {
+        // If local fails, try fallback
+        const fallbackUrl = (fallbackSounds as any)[key];
+        console.warn(`Local sound ${key} not found at ${path}. Using fallback: ${fallbackUrl}`);
+        audio.src = fallbackUrl;
+        audio.load();
       };
+      
       this.sounds[key] = audio;
     }
 
-    this.music = new Audio('/sounds/casino_music.mp3');
-    this.music.onerror = (e) => {
-      console.error(`Failed to load background music at path: /sounds/casino_music.mp3. Please ensure the file exists in public/sounds/ and the name matches exactly (case-sensitive).`);
+    const localMusic = '/sounds/casino_music.mp3';
+    const fallbackMusic = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
+    
+    this.music = new Audio(localMusic);
+    this.music.onerror = () => {
+      console.warn(`Local background music not found at ${localMusic}. Using fallback: ${fallbackMusic}`);
+      if (this.music) {
+        this.music.src = fallbackMusic;
+        this.music.load();
+        if (this.isMusicEnabled && !this.isMuted && this.initialized) {
+          this.playMusic();
+        }
+      }
     };
     this.music.loop = true;
     this.music.preload = 'auto';
