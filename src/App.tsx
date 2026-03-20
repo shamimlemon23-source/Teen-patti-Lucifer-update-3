@@ -379,7 +379,7 @@ export default function App() {
       const totalBet = currentPlayer?.isBlind ? newLastBet : newLastBet * 2;
       
       if (currentPlayer && currentPlayer.chips < totalBet) {
-        alert(`Not enough chips! You need ${totalBet.toLocaleString()} chips for this raise.`);
+        alert(`Not enough chips! You need ${totalBet.toLocaleString()} $(USD) for this raise.`);
         return;
       }
       takeAction('raise', raiseAmount);
@@ -742,10 +742,10 @@ export default function App() {
                   <span className="text-[8px] md:text-[12px] font-black uppercase tracking-[0.5em] text-red-500 mb-1 md:mb-2">Pot Value</span>
                   <div className="flex items-center gap-2 md:gap-4 text-2xl md:text-6xl font-black text-white drop-shadow-[0_4px_20px_rgba(0,0,0,0.8)]">
                     <Coins className="w-5 h-5 md:w-12 md:h-12 text-yellow-500" />
-                    {gameState?.pot.toLocaleString() || 0}
+                    {gameState?.pot.toLocaleString() || 0} <span className="text-xs md:text-2xl ml-1 md:ml-2 text-white/60">$(USD)</span>
                   </div>
                   <div className="mt-2 md:mt-4 text-[8px] md:text-sm font-black text-white/40 uppercase tracking-[0.2em] flex items-center gap-2 md:gap-4">
-                    <span>Bet: {gameState?.lastBet.toLocaleString() || 0}</span>
+                    <span>Bet: {gameState?.lastBet.toLocaleString() || 0} $(USD)</span>
                     <span className="w-1 h-1 bg-white/20 rounded-full" />
                     <span>Round: {gameState?.roundCount || 0}/5</span>
                   </div>
@@ -822,7 +822,7 @@ export default function App() {
                         <span className="text-[8px] md:text-sm font-black truncate max-w-[70px] md:max-w-[140px] text-white tracking-tight">{player.name}</span>
                         <div className="flex items-center gap-1 text-[9px] md:text-base font-black text-yellow-500">
                           <Coins className="w-3 h-3 md:w-4 md:h-4" />
-                          {player.chips === -1 ? "???" : player.chips.toLocaleString()}
+                          {player.chips === -1 ? "???" : player.chips.toLocaleString()} <span className="text-[7px] md:text-xs opacity-60">$(USD)</span>
                         </div>
                       </div>
                     </div>
@@ -847,7 +847,7 @@ export default function App() {
                   <span className="text-[8px] md:text-[10px] font-black uppercase tracking-[0.3em] text-white/30">Your Balance</span>
                   <div className="flex items-center gap-2">
                     <Coins className="w-3 h-3 md:w-6 md:h-6 text-yellow-500" />
-                    <span className="text-xs md:text-2xl font-black tracking-tighter text-white">{currentPlayer?.chips.toLocaleString() || 0}</span>
+                    <span className="text-xs md:text-2xl font-black tracking-tighter text-white">{currentPlayer?.chips.toLocaleString() || 0} <span className="text-[8px] md:text-sm text-white/40 ml-1">$(USD)</span></span>
                   </div>
                 </div>
                 {timeLeft !== null && isMyTurn && (
@@ -874,7 +874,7 @@ export default function App() {
                       <button onClick={() => takeAction('chaal')} className="bg-red-600 text-white font-black px-4 md:px-12 py-2 md:py-4 uppercase tracking-widest min-w-[80px] md:min-w-[180px] hover:bg-red-500 transition-all active:scale-95 border-r border-red-400/20">
                         <div className="flex flex-col items-center">
                           <span className="text-[7px] md:text-[10px] font-black text-white/60 leading-none mb-0.5 md:mb-1">CHAAL</span>
-                          <span className="text-xs md:text-2xl leading-none">{(currentPlayer?.isBlind ? gameState?.lastBet : (gameState?.lastBet || 0) * 2)?.toLocaleString()}</span>
+                          <span className="text-xs md:text-2xl leading-none">{(currentPlayer?.isBlind ? gameState?.lastBet : (gameState?.lastBet || 0) * 2)?.toLocaleString()} <span className="text-[8px] md:text-xs opacity-60">$(USD)</span></span>
                         </div>
                       </button>
                       <button 
@@ -987,7 +987,7 @@ export default function App() {
                           <div key={stat.name || i} className="flex items-center justify-between p-2 md:p-4 bg-white/5 border border-white/5 rounded-xl md:rounded-2xl">
                             <div className="flex items-center gap-2 md:gap-3"><span className="text-xs md:text-base font-bold">{stat.name}</span></div>
                             <div className="flex items-center gap-2 md:gap-4">
-                              <div className="flex items-center gap-1 md:gap-2 text-yellow-500 font-black text-[10px] md:text-base"><Coins className="w-3 h-3 md:w-4 md:h-4" />{Number(stat.chips).toLocaleString()}</div>
+                              <div className="flex items-center gap-1 md:gap-2 text-yellow-500 font-black text-[10px] md:text-base"><Coins className="w-3 h-3 md:w-4 md:h-4" />{Number(stat.chips).toLocaleString()} $(USD)</div>
                               <button onClick={() => handleAdminAdd(stat.name)} className="p-1.5 md:p-2 bg-green-600/10 hover:bg-green-600/20 border border-green-500/20 rounded-lg text-green-500 text-[8px] md:text-[10px] font-black uppercase">Add</button>
                               <button onClick={() => handleAdminSet(stat.name)} className="p-1.5 md:p-2 bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/20 rounded-lg text-blue-500 text-[8px] md:text-[10px] font-black uppercase">Set</button>
                               <button onClick={() => adminAction(stat.name, 'reset')} className="p-1.5 md:p-2 bg-red-600/10 hover:bg-red-600/20 border border-red-500/20 rounded-lg text-red-500 text-[8px] md:text-[10px] font-black uppercase">Reset</button>
