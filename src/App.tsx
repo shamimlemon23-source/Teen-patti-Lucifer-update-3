@@ -19,9 +19,13 @@ import {
   Settings,
   Plus,
   RefreshCw,
-  Disc
+  Disc,
+  Volume2,
+  VolumeX,
+  Music
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { soundService } from './services/soundService.js';
 
 // --- Types ---
 type Suit = 'hearts' | 'diamonds' | 'clubs' | 'spades';
@@ -87,6 +91,15 @@ interface CardComponentProps {
 
 const CardComponent = ({ card, hidden, index }: CardComponentProps) => {
   const tilt = useMemo(() => (index - 1) * 8, [index]);
+  
+  useEffect(() => {
+    if (!hidden) {
+      soundService.play('flip');
+    } else {
+      soundService.play('deal');
+    }
+  }, [hidden]);
+
   return (
     <motion.div
       initial={{ scale: 0, y: -50, rotate: 180, opacity: 0 }}
@@ -148,12 +161,34 @@ export default function App() {
   const [spinResult, setSpinResult] = useState<string | null>(null);
   const [gameNotification, setGameNotification] = useState<string | null>(null);
   const [lastSpinTime, setLastSpinTime] = useState<number>(0);
+  const [soundSettings, setSoundSettings] = useState(soundService.getSettings());
 
   const isAdmin = useMemo(() => name.trim().toUpperCase() === 'LUCIFER_DEV_777', [name]);
 
   useEffect(() => {
+    const handleFirstInteraction = () => {
+      soundService.init();
+      // Remove listeners after first interaction
+      window.removeEventListener('click', handleFirstInteraction);
+      window.removeEventListener('touchstart', handleFirstInteraction);
+      window.removeEventListener('mousedown', handleFirstInteraction);
+    };
+    
+    window.addEventListener('click', handleFirstInteraction);
+    window.addEventListener('touchstart', handleFirstInteraction);
+    window.addEventListener('mousedown', handleFirstInteraction);
+    
+    return () => {
+      window.removeEventListener('click', handleFirstInteraction);
+      window.removeEventListener('touchstart', handleFirstInteraction);
+      window.removeEventListener('mousedown', handleFirstInteraction);
+    };
+  }, []);
+
+  useEffect(() => {
     if (socket) {
       socket.on('spinResult', (data: { prize: string, chips: number, lastSpin: number }) => {
+        soundService.play('win');
         // Small delay to let the animation feel better before showing result
         setTimeout(() => {
           setIsSpinning(false);
@@ -244,8 +279,24 @@ export default function App() {
     });
 
     newSocket.on('gameState', (state: GameState) => {
+      const oldWinner = gameState?.winner;
+      const oldGameStarted = gameState?.gameStarted;
+      
       setGameState(state);
-      if (state.winner) confetti({ particleCount: 150, spread: 70 });
+      
+      if (state.winner && !oldWinner) {
+        const myPlayer = state.players.find(p => p.id === newSocket.id);
+        if (state.winner === myPlayer?.name) {
+          soundService.play('win');
+          confetti({ particleCount: 150, spread: 70 });
+        } else {
+          soundService.play('lose');
+        }
+      }
+
+      if (state.gameStarted && !oldGameStarted) {
+        soundService.play('shuffle');
+      }
     });
 
     newSocket.on('adminStats', (stats: any[]) => setAdminStats(stats));
@@ -274,10 +325,28 @@ export default function App() {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
-  const joinRoom = () => { if (socket && name) { socket.emit('joinRoom', { roomId, name, password }); setJoined(true); } };
-  const startGame = () => socket?.emit('startGame', roomId);
+  const joinRoom = () => { 
+    if (socket && name) { 
+      soundService.play('click');
+      soundService.init(); // Unlock audio on first interaction
+      socket.emit('joinRoom', { roomId, name, password }); 
+      setJoined(true); 
+    } 
+  };
+  const startGame = () => {
+    soundService.play('click');
+    socket?.emit('startGame', roomId);
+  };
   
   const takeAction = (action: string, amount?: number) => {
+    if (action === 'fold') {
+      soundService.play('fold');
+    } else if (['chaal', 'raise', 'see'].includes(action)) {
+      soundService.play('bet');
+    } else {
+      soundService.play('click');
+    }
+
     if (action === 'chaal' || action === 'raise') {
       const bet = action === 'chaal' 
         ? (currentPlayer?.isBlind ? gameState?.lastBet : (gameState?.lastBet || 0) * 2)
@@ -292,10 +361,12 @@ export default function App() {
   };
 
   const handleSideShow = () => {
+    soundService.play('click');
     socket?.emit('sideShowRequest', roomId);
   };
 
   const respondSideShow = (accepted: boolean) => {
+    soundService.play('click');
     socket?.emit('sideShowResponse', { roomId, accepted });
     setSideShowPrompt(null);
   };
@@ -344,6 +415,7 @@ export default function App() {
 
   const handleSpin = () => {
     if (isSpinning) return;
+    soundService.play('click');
     setIsSpinning(true);
     socket?.emit('spinWheel', { name });
   };
@@ -382,6 +454,7 @@ export default function App() {
   }, [isMyTurn, gameState, activePlayersCount]);
 
   const toggleFullscreen = () => {
+    soundService.play('click');
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen().catch(err => {
         console.error(`Error attempting to enable full-screen mode: ${err.message}`);
@@ -389,6 +462,16 @@ export default function App() {
     } else {
       document.exitFullscreen();
     }
+  };
+
+  const toggleMute = () => {
+    soundService.toggleMute();
+    setSoundSettings(soundService.getSettings());
+  };
+
+  const toggleMusic = () => {
+    soundService.toggleMusic();
+    setSoundSettings(soundService.getSettings());
   };
 
   if (showSplash) {
@@ -456,6 +539,22 @@ export default function App() {
             title="Toggle Fullscreen"
           >
             {isFullscreen ? <Minimize2 className="w-4 h-4 text-white" /> : <Maximize2 className="w-4 h-4 text-white" />}
+          </button>
+
+          <button 
+            onClick={toggleMute}
+            className={`p-2 rounded-xl transition-colors border flex items-center justify-center ${soundSettings.isMuted ? 'bg-red-600/20 border-red-500/30 text-red-500' : 'bg-white/5 border-white/10 text-white'}`}
+            title={soundSettings.isMuted ? "Unmute" : "Mute"}
+          >
+            {soundSettings.isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+          </button>
+
+          <button 
+            onClick={toggleMusic}
+            className={`p-2 rounded-xl transition-colors border flex items-center justify-center ${!soundSettings.isMusicEnabled ? 'bg-red-600/20 border-red-500/30 text-red-500' : 'bg-white/5 border-white/10 text-white'}`}
+            title={soundSettings.isMusicEnabled ? "Stop Music" : "Play Music"}
+          >
+            <Music className="w-4 h-4" />
           </button>
 
           {joined && (
