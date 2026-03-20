@@ -38,7 +38,9 @@ class SoundService {
     };
 
     for (const [key, path] of Object.entries(localSounds)) {
-      const audio = new Audio(path);
+      const audio = new Audio();
+      audio.crossOrigin = "anonymous";
+      audio.src = path;
       audio.preload = 'auto';
       
       audio.onerror = () => {
@@ -55,13 +57,17 @@ class SoundService {
     const localMusic = '/sounds/casino_music.mp3';
     const fallbackMusic = 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3';
     
-    this.music = new Audio(localMusic);
+    this.music = new Audio();
+    this.music.crossOrigin = "anonymous";
+    this.music.src = localMusic;
+    
     this.music.onerror = () => {
       console.warn(`Local background music not found at ${localMusic}. Using fallback: ${fallbackMusic}`);
       if (this.music) {
         this.music.src = fallbackMusic;
         this.music.load();
-        if (this.isMusicEnabled && !this.isMuted && this.initialized) {
+        // If already initialized, try playing the fallback
+        if (this.initialized && this.isMusicEnabled && !this.isMuted) {
           this.playMusic();
         }
       }
