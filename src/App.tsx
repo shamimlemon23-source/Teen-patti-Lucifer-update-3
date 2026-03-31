@@ -146,7 +146,7 @@ export default function App() {
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [adminTab, setAdminTab] = useState<'players' | 'manual'>('players');
   const [manualName, setManualName] = useState('');
-  const [manualAmount, setManualAmount] = useState('50000000');
+  const [manualAmount, setManualAmount] = useState('50000');
   const [adminStats, setAdminStats] = useState<any[]>([]);
   const [adminSearch, setAdminSearch] = useState('');
   const [adminMessage, setAdminMessage] = useState('');
@@ -400,14 +400,14 @@ export default function App() {
   };
 
   const handleAdminAdd = (targetName: string) => {
-    const amount = prompt(`Enter amount to add for ${targetName}:`, "50000000");
+    const amount = prompt(`Enter amount to add for ${targetName}:`, "50000");
     if (amount && !isNaN(parseInt(amount))) {
       adminAction(targetName, 'add', parseInt(amount));
     }
   };
 
   const handleAdminSet = (targetName: string) => {
-    const amount = prompt(`Enter exact chips for ${targetName}:`, "100000000");
+    const amount = prompt(`Enter exact chips for ${targetName}:`, "50000");
     if (amount && !isNaN(parseInt(amount))) {
       adminAction(targetName, 'set', parseInt(amount));
     }
@@ -606,7 +606,7 @@ export default function App() {
 
               <div className="text-red-600 text-[10px] font-bold uppercase tracking-[0.3em] mb-4">ULTRA UPDATE v3.0</div>
               <h1 className="text-4xl font-black mb-2 tracking-tighter">LUCIFER <span className="text-red-600">POKER</span></h1>
-              <p className="text-white/40 text-sm mb-8 font-bold">5 Crore Chips & Lucifer Bots Active!</p>
+              <p className="text-white/40 text-sm mb-8 font-bold">50K Chips & Lucifer Bots Active!</p>
               
               <div className="space-y-4">
                 <div className="relative">
