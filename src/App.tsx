@@ -493,7 +493,7 @@ export default function App() {
           initial={{ y: 20, opacity: 0 }} 
           animate={{ y: 0, opacity: 1 }} 
           transition={{ delay: 0.5 }} 
-          className="relative z-10 mt-8 text-5xl md:text-8xl font-poker text-red-600 tracking-widest text-center uppercase drop-shadow-[0_0_30px_rgba(220,38,38,0.6)]"
+          className="relative z-10 mt-4 text-3xl md:text-5xl font-poker text-emerald-500 tracking-normal text-center uppercase drop-shadow-[0_0_20px_rgba(16,185,129,0.4)]"
         >
           TEEN PATTI LUCIFER
         </motion.h1>
@@ -522,7 +522,7 @@ export default function App() {
             <img src={ASSETS.LOGO} alt="Logo" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
           </div>
           <div className="flex flex-col">
-            <h2 className="font-poker text-xl md:text-3xl leading-tight text-red-600 tracking-wider uppercase">
+            <h2 className="font-poker text-lg md:text-2xl leading-tight text-emerald-500 tracking-normal uppercase">
               TEEN PATTI LUCIFER
             </h2>
             <div className="flex items-center gap-2">
@@ -607,7 +607,7 @@ export default function App() {
               </motion.div>
 
               <div className="text-red-600 text-[10px] font-bold uppercase tracking-[0.3em] mb-4">ULTRA UPDATE v3.0</div>
-              <h1 className="font-poker text-5xl md:text-8xl mb-2 tracking-widest uppercase text-red-600 drop-shadow-[0_0_20px_rgba(220,38,38,0.5)]">
+              <h1 className="font-poker text-3xl md:text-5xl mb-1 tracking-normal uppercase text-emerald-500 drop-shadow-[0_0_15px_rgba(16,185,129,0.4)]">
                 TEEN PATTI LUCIFER
               </h1>
               <p className="text-white/40 text-sm mb-8 font-bold">50K Chips & Lucifer Bots Active!</p>
@@ -699,9 +699,9 @@ export default function App() {
                 </motion.div>
               )}
             </AnimatePresence>
-            <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
+            <div className="relative w-full h-full flex items-center justify-center overflow-hidden py-4">
               {/* Table Surface */}
-              <div className="absolute w-[90%] h-[70%] md:w-[80%] md:h-[60%] bg-emerald-900/20 rounded-[100px] md:rounded-[200px] border-[10px] md:border-[20px] border-zinc-900/80 shadow-[inset_0_0_100px_rgba(0,0,0,0.8),0_20px_50px_rgba(0,0,0,0.5)] flex items-center justify-center overflow-hidden">
+              <div className="absolute w-[95%] h-[60%] md:w-[85%] md:h-[55%] bg-emerald-900/20 rounded-[100px] md:rounded-[200px] border-[8px] md:border-[15px] border-zinc-900/80 shadow-[inset_0_0_100px_rgba(0,0,0,0.8),0_20px_50px_rgba(0,0,0,0.5)] flex items-center justify-center overflow-hidden">
                 <img src={ASSETS.TABLE_BG} alt="Table" className="w-full h-full object-cover opacity-30 mix-blend-overlay" referrerPolicy="no-referrer" />
               </div>
               
@@ -848,8 +848,8 @@ export default function App() {
           </main>
 
           {/* Controls */}
-          <footer className="relative p-2 md:p-6 pb-14 md:pb-20 bg-gradient-to-t from-black via-black/80 to-transparent z-50">
-            <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-2 md:gap-6">
+          <footer className="relative p-2 md:p-4 pb-4 md:pb-6 bg-gradient-to-t from-black via-black/80 to-transparent z-50">
+            <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-2 md:gap-4">
               <div className="flex items-center gap-2 md:gap-4 bg-black/80 backdrop-blur-3xl p-2 md:p-4 rounded-2xl border border-white/10 w-full md:w-auto justify-between md:justify-start shadow-2xl">
                 <div className="flex flex-col items-start">
                   <span className="text-[8px] md:text-[10px] font-black uppercase tracking-[0.3em] text-white/30">Your Balance</span>
