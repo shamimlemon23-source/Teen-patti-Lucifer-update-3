@@ -1,8 +1,10 @@
+@import url('https://fonts.googleapis.com/css2?family=Anton&family=Inter:wght@400;700;900&display=swap');
 @import "tailwindcss";
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-display: "Anton", sans-serif;
 }
 
 @layer base {
@@ -16,10 +18,6 @@
     padding: 0;
     overflow: hidden !important;
     position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
     touch-action: none;
     -webkit-overflow-scrolling: none;
     user-select: none;
@@ -32,18 +30,20 @@
   }
 }
 
-/* Orientation Warning for Mobile Portrait */
-@media screen and (orientation: portrait) and (max-width: 768px) {
-  .portrait-warning {
-    display: flex !important;
-  }
-}
-
-.portrait-warning {
-  display: none;
-}
-
-/* Custom scrollbar (though hidden) */
+/* Custom scrollbar */
 ::-webkit-scrollbar {
-  width: 0px;
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-white/10 rounded-full hover:bg-white/20 transition-colors;
+}
+
+/* Card animations */
+.card-fan {
+  transform-origin: bottom center;
 }
