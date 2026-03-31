@@ -493,9 +493,10 @@ export default function App() {
           initial={{ y: 20, opacity: 0 }} 
           animate={{ y: 0, opacity: 1 }} 
           transition={{ delay: 0.5 }} 
-          className="relative z-10 mt-8 text-4xl font-black text-white tracking-tighter text-center"
+          className="relative z-10 mt-8 text-4xl md:text-6xl font-display text-white tracking-tighter text-center uppercase"
         >
-          LUCIFER <span className="text-red-600">POKER</span>
+          <span className="text-red-600 italic block text-2xl md:text-3xl mb-[-10px]">TEEN PATTI</span>
+          LUCIFER
         </motion.h1>
         <div className="relative z-10 mt-4 text-white/40 font-bold uppercase tracking-[0.5em] text-[10px]">Loading Underworld...</div>
       </div>
@@ -522,7 +523,9 @@ export default function App() {
             <img src={ASSETS.LOGO} alt="Logo" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
           </div>
           <div className="flex flex-col">
-            <h2 className="font-black text-xs md:text-xl leading-tight text-white tracking-tighter">TEEN PATTI <span className="text-red-500">LUCIFER</span></h2>
+            <h2 className="font-display text-xs md:text-xl leading-tight text-white tracking-tighter uppercase">
+              <span className="text-red-500 italic">TEEN PATTI</span> LUCIFER
+            </h2>
             <div className="flex items-center gap-2">
               <span className="text-[8px] md:text-[10px] text-white/40 font-bold uppercase tracking-widest">
                 {joined ? `Table: ${roomId}` : 'Underworld Lobby'}
@@ -605,7 +608,10 @@ export default function App() {
               </motion.div>
 
               <div className="text-red-600 text-[10px] font-bold uppercase tracking-[0.3em] mb-4">ULTRA UPDATE v3.0</div>
-              <h1 className="text-4xl font-black mb-2 tracking-tighter">LUCIFER <span className="text-red-600">POKER</span></h1>
+              <h1 className="font-display text-4xl md:text-6xl mb-2 tracking-tighter uppercase">
+                <span className="text-red-600 italic block text-2xl md:text-3xl mb-[-10px]">TEEN PATTI</span>
+                LUCIFER
+              </h1>
               <p className="text-white/40 text-sm mb-8 font-bold">50K Chips & Lucifer Bots Active!</p>
               
               <div className="space-y-4">
@@ -822,7 +828,7 @@ export default function App() {
                         <span className="text-[8px] md:text-sm font-black truncate max-w-[70px] md:max-w-[140px] text-white tracking-tight">{player.name}</span>
                         <div className="flex items-center gap-1 text-[9px] md:text-base font-black text-yellow-500">
                           <Coins className="w-3 h-3 md:w-4 md:h-4" />
-                          {player.chips === -1 ? "???" : player.chips.toLocaleString()} <span className="text-[7px] md:text-xs opacity-60">$(USD)</span>
+                          {player.chips === -1 ? "HIDDEN" : player.chips.toLocaleString()} <span className="text-[7px] md:text-xs opacity-60">$(USD)</span>
                         </div>
                       </div>
                     </div>
