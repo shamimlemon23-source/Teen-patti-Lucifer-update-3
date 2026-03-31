@@ -157,7 +157,7 @@ const getPlayerChips = async (name: string, password?: string, ignorePassword = 
       
       // If ignorePassword is true, we are doing an internal update (like spin or admin)
       if (ignorePassword) {
-        return { chips: (data.chips !== undefined) ? Number(data.chips) : 50000000, last_spin: data.last_spin || 0 };
+        return { chips: (data.chips !== undefined) ? Number(data.chips) : 50000, last_spin: data.last_spin || 0 };
       }
 
       // If the account HAS a password, we MUST verify it.
@@ -173,10 +173,10 @@ const getPlayerChips = async (name: string, password?: string, ignorePassword = 
         await updateDoc(playerRef, { password: password.trim() });
       }
       
-      return { chips: (data.chips !== undefined) ? Number(data.chips) : 50000000, last_spin: data.last_spin || 0 };
+      return { chips: (data.chips !== undefined) ? Number(data.chips) : 50000, last_spin: data.last_spin || 0 };
     }
     
-    const initialChips = 50000000;
+    const initialChips = 50000;
     const newData = {
       name,
       chips: initialChips,
@@ -448,8 +448,8 @@ async function startServer() {
       game.roundCount = 0;
       game.players.forEach((p: any) => {
         // Fix for bot chips going negative or too low
-        if (p.isBot && p.chips < 1000000) {
-          p.chips = 500000000;
+        if (p.isBot && p.chips < 1000) {
+          p.chips = 50000;
         }
         
         p.hand = [game.deck.pop(), game.deck.pop(), game.deck.pop()];
@@ -538,7 +538,7 @@ async function startServer() {
       if (!rooms[rid]) {
         rooms[rid] = { 
           players: [
-            { id: "bot1", name: "😈 Lucifer Bot", chips: 500000000, hand: [], isFolded: false, isBlind: true, currentBet: 0, isBot: true }
+            { id: "bot1", name: "😈 Lucifer Bot", chips: 50000, hand: [], isFolded: false, isBlind: true, currentBet: 0, isBot: true }
           ], 
           pot: 0, currentTurn: 0, lastBet: 50000, gameStarted: false, winner: null, deck: [], roundCount: 0 
         };
@@ -800,18 +800,18 @@ async function startServer() {
             const querySnapshot = await getDocs(collection(db, 'players'));
             const batch = writeBatch(db);
             querySnapshot.docs.forEach((d: any) => {
-              batch.update(d.ref, { chips: 50000000 });
+              batch.update(d.ref, { chips: 50000 });
             });
             await batch.commit();
             
             Object.keys(rooms).forEach(r => {
               rooms[r].players.forEach((p: any) => {
-                p.chips = 50000000;
+                p.chips = 50000;
               });
               emitGameState(r);
             });
             await refreshAdminStats();
-            socket.emit("adminMessage", "All players reset to 5 Cr");
+            socket.emit("adminMessage", "All players reset to 50K");
           } catch (error) {
             console.error('Admin Reset All Error:', error);
             socket.emit("adminMessage", "Error resetting all players");
@@ -841,7 +841,7 @@ async function startServer() {
               await setDoc(playerRef, { name: target, chips: add, last_spin: 0, password: '' });
             }
           } else if (type === "reset") {
-            await updateDoc(playerRef, { chips: 50000000 });
+            await updateDoc(playerRef, { chips: 50000 });
           } else if (type === "set") {
             const setVal = Number(amount) || 0;
             if (snap.exists()) {
@@ -894,11 +894,11 @@ async function startServer() {
         }
 
         const options = [
-          { label: "1 COROR", value: 10000000 },
-          { label: "2 COROR", value: 20000000 },
-          { label: "5 COROR", value: 50000000 },
-          { label: "10 COROR", value: 100000000 },
-          { label: "20 COROR", value: 200000000 }
+          { label: "10K", value: 10000 },
+          { label: "20K", value: 20000 },
+          { label: "30K", value: 30000 },
+          { label: "50K", value: 50000 },
+          { label: "1 LAC", value: 100000 }
         ];
 
         const randomIndex = Math.floor(Math.random() * options.length);
