@@ -331,8 +331,10 @@ async function startServer() {
           const stateToSend = JSON.parse(JSON.stringify(game));
           stateToSend.players.forEach((p: any) => {
             if (p.id !== socketId && !game.winner) {
-              if (!p.isBot) p.hand = p.hand.map(() => ({ suit: 'back', rank: '?' }));
-              p.chips = -1; // Hide chips for everyone else
+              if (!p.isBot) {
+                p.hand = p.hand.map(() => ({ suit: 'back', rank: '?' }));
+                p.chips = -1; // Hide chips for other real players
+              }
             }
           });
           socket.emit("gameState", stateToSend);
@@ -444,7 +446,7 @@ async function startServer() {
       game.gameStarted = true; 
       game.deck = createDeck(); 
       game.pot = 0; 
-      game.lastBet = 50000; 
+      game.lastBet = 1000; 
       game.winner = null; 
       game.roundCount = 0;
       game.players.forEach((p: any) => {
@@ -456,8 +458,8 @@ async function startServer() {
         p.hand = [game.deck.pop(), game.deck.pop(), game.deck.pop()];
         p.isFolded = false; 
         p.isBlind = true; 
-        p.chips -= 50000; 
-        game.pot += 50000;
+        p.chips -= 1000; 
+        game.pot += 1000;
         if (!p.isBot) updatePlayerChips(p.name, p.chips);
       });
       game.currentTurn = 0; 
@@ -541,7 +543,7 @@ async function startServer() {
           players: [
             { id: "bot1", name: "😈 Lucifer Bot", chips: 50000, hand: [], isFolded: false, isBlind: true, currentBet: 0, isBot: true }
           ], 
-          pot: 0, currentTurn: 0, lastBet: 50000, gameStarted: false, winner: null, deck: [], roundCount: 0 
+          pot: 0, currentTurn: 0, lastBet: 1000, gameStarted: false, winner: null, deck: [], roundCount: 0 
         };
       }
       const game = rooms[rid];
