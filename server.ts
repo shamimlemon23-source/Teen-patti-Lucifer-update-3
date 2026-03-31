@@ -330,8 +330,9 @@ async function startServer() {
         if (socket) {
           const stateToSend = JSON.parse(JSON.stringify(game));
           stateToSend.players.forEach((p: any) => {
-            if (p.id !== socketId && !p.isBot && !game.winner) {
-              p.hand = p.hand.map(() => ({ suit: 'back', rank: '?' }));
+            if (p.id !== socketId && !game.winner) {
+              if (!p.isBot) p.hand = p.hand.map(() => ({ suit: 'back', rank: '?' }));
+              p.chips = -1; // Hide chips for everyone else
             }
           });
           socket.emit("gameState", stateToSend);
