@@ -760,7 +760,13 @@ export default function App() {
             <motion.div 
               initial={{ scale: 0, rotate: -180 }}
               animate={{ scale: 1, rotate: 0 }}
-              className="relative z-20 w-28 h-28 md:w-40 md:h-40 bg-gradient-to-br from-red-600 to-red-950 rounded-full border-4 border-red-500/50 shadow-[0_0_50px_rgba(220,38,38,0.5)] flex items-center justify-center overflow-hidden group"
+              className="relative z-20 w-28 h-28 md:w-40 md:h-40 bg-gradient-to-br from-red-600/80 to-red-950/80 rounded-full border-4 border-red-500/50 shadow-[0_0_50px_rgba(220,38,38,0.5)] flex items-center justify-center overflow-hidden group"
+              style={{ 
+                backgroundImage: `url('https://i.imgur.com/9jpJ7hQ.png')`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundBlendMode: 'overlay'
+              }}
             >
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white/20 to-transparent opacity-50" />
               <div className="text-center z-10">
@@ -781,7 +787,15 @@ export default function App() {
                 onClick={() => joinRoom('PLAY_NOW', 'table-1')}
                 className="absolute top-4 left-1/2 -translate-x-1/2 -translate-y-1/2 group"
               >
-                <div className="w-20 h-20 md:w-32 md:h-32 bg-gradient-to-b from-emerald-400 to-emerald-800 rounded-full border-4 border-emerald-300/30 shadow-2xl flex flex-col items-center justify-center p-2 transition-all group-hover:scale-110 group-hover:shadow-[0_0_30px_rgba(16,185,129,0.4)]">
+                <div 
+                  className="w-20 h-20 md:w-32 md:h-32 bg-gradient-to-b from-emerald-400/80 to-emerald-800/80 rounded-full border-4 border-emerald-300/30 shadow-2xl flex flex-col items-center justify-center p-2 transition-all group-hover:scale-110 group-hover:shadow-[0_0_30px_rgba(16,185,129,0.4)] overflow-hidden relative"
+                  style={{ 
+                    backgroundImage: `url('https://i.imgur.com/9jpJ7hQ.png')`,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                    backgroundBlendMode: 'overlay'
+                  }}
+                >
                   <Play className="w-6 h-6 md:w-10 md:h-10 text-white mb-1" />
                   <span className="font-poker text-[8px] md:text-lg text-white uppercase">Play Now</span>
                 </div>
@@ -795,7 +809,15 @@ export default function App() {
                 onClick={() => joinRoom('NO_LIMIT', 'nolimit-1')}
                 className="absolute top-1/2 right-4 translate-x-1/2 -translate-y-1/2 group"
               >
-                <div className="w-20 h-20 md:w-32 md:h-32 bg-gradient-to-b from-orange-400 to-red-800 rounded-full border-4 border-orange-300/30 shadow-2xl flex flex-col items-center justify-center p-2 transition-all group-hover:scale-110 group-hover:shadow-[0_0_30px_rgba(249,115,22,0.4)]">
+                <div 
+                  className="w-20 h-20 md:w-32 md:h-32 bg-gradient-to-b from-orange-400/80 to-red-800/80 rounded-full border-4 border-orange-300/30 shadow-2xl flex flex-col items-center justify-center p-2 transition-all group-hover:scale-110 group-hover:shadow-[0_0_30px_rgba(249,115,22,0.4)] overflow-hidden relative"
+                  style={{ 
+                    backgroundImage: `url('https://i.imgur.com/9jpJ7hQ.png')`,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                    backgroundBlendMode: 'overlay'
+                  }}
+                >
                   <Trophy className="w-6 h-6 md:w-10 md:h-10 text-white mb-1" />
                   <span className="font-poker text-[8px] md:text-lg text-white uppercase leading-none text-center">No Limit<br/>Table</span>
                 </div>
@@ -814,7 +836,15 @@ export default function App() {
                 }}
                 className="absolute bottom-4 left-1/2 -translate-x-1/2 translate-y-1/2 group"
               >
-                <div className="w-20 h-20 md:w-32 md:h-32 bg-gradient-to-b from-purple-500 to-indigo-900 rounded-full border-4 border-purple-300/30 shadow-2xl flex flex-col items-center justify-center p-2 transition-all group-hover:scale-110 group-hover:shadow-[0_0_30px_rgba(139,92,246,0.4)]">
+                <div 
+                  className="w-20 h-20 md:w-32 md:h-32 bg-gradient-to-b from-purple-500/80 to-indigo-900/80 rounded-full border-4 border-purple-300/30 shadow-2xl flex flex-col items-center justify-center p-2 transition-all group-hover:scale-110 group-hover:shadow-[0_0_30px_rgba(139,92,246,0.4)] overflow-hidden relative"
+                  style={{ 
+                    backgroundImage: `url('https://i.imgur.com/9jpJ7hQ.png')`,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                    backgroundBlendMode: 'overlay'
+                  }}
+                >
                   <Lock className="w-6 h-6 md:w-10 md:h-10 text-white mb-1" />
                   <span className="font-poker text-[8px] md:text-lg text-white uppercase leading-none text-center">Private<br/>Table</span>
                 </div>
@@ -828,7 +858,15 @@ export default function App() {
                 onClick={() => setShowSpinWheel(true)}
                 className="absolute top-1/2 left-4 -translate-x-1/2 -translate-y-1/2 group"
               >
-                <div className="w-20 h-20 md:w-32 md:h-32 bg-gradient-to-b from-yellow-400 to-amber-700 rounded-full border-4 border-yellow-300/30 shadow-2xl flex flex-col items-center justify-center p-2 transition-all group-hover:scale-110 group-hover:shadow-[0_0_30px_rgba(234,179,8,0.4)]">
+                <div 
+                  className="w-20 h-20 md:w-32 md:h-32 bg-gradient-to-b from-yellow-400/80 to-amber-700/80 rounded-full border-4 border-yellow-300/30 shadow-2xl flex flex-col items-center justify-center p-2 transition-all group-hover:scale-110 group-hover:shadow-[0_0_30px_rgba(234,179,8,0.4)] overflow-hidden relative"
+                  style={{ 
+                    backgroundImage: `url('https://i.imgur.com/9jpJ7hQ.png')`,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                    backgroundBlendMode: 'overlay'
+                  }}
+                >
                   <Disc className="w-6 h-6 md:w-10 md:h-10 text-white mb-1 animate-spin-slow" />
                   <span className="font-poker text-[8px] md:text-lg text-white uppercase">Lucky Spin</span>
                 </div>
