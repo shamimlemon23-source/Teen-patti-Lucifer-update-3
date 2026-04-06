@@ -406,10 +406,12 @@ export default function App() {
       soundService.play('click');
     }
 
-    if (action === 'chaal' || action === 'raise') {
-      const bet = action === 'chaal' 
+    if (action === 'chaal' || action === 'raise' || action === 'show') {
+      const bet = action === 'show'
         ? (currentPlayer?.isBlind ? gameState?.lastBet : (gameState?.lastBet || 0) * 2)
-        : (currentPlayer?.isBlind ? (gameState?.lastBet || 0) + (amount || 0) : ((gameState?.lastBet || 0) + (amount || 0)) * 2);
+        : (action === 'chaal' 
+          ? (currentPlayer?.isBlind ? gameState?.lastBet : (gameState?.lastBet || 0) * 2)
+          : (currentPlayer?.isBlind ? (gameState?.lastBet || 0) + (amount || 0) : ((gameState?.lastBet || 0) + (amount || 0)) * 2));
       
       if (currentPlayer && currentPlayer.chips < (bet || 0)) {
         alert("Not enough chips!");
@@ -476,7 +478,17 @@ export default function App() {
     if (isSpinning) return;
     soundService.play('click');
     setIsSpinning(true);
+    // Add a timeout to prevent permanent hang if server doesn't respond
+    const timeout = setTimeout(() => {
+      if (isSpinning) {
+        setIsSpinning(false);
+        alert("Spin timed out. Please try again.");
+      }
+    }, 10000);
     socket?.emit('spinWheel', { name });
+    
+    // Clear timeout if result received (handled in useEffect where spinResult is received)
+    // Actually, I'll just rely on the socket listener to set isSpinning(false)
   };
 
   const rotatedPlayers = useMemo(() => {
@@ -514,12 +526,28 @@ export default function App() {
 
   const toggleFullscreen = () => {
     soundService.play('click');
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(err => {
-        console.error(`Error attempting to enable full-screen mode: ${err.message}`);
-      });
-    } else {
-      document.exitFullscreen();
+    try {
+      if (!document.fullscreenElement) {
+        const elem = document.documentElement;
+        if (elem.requestFullscreen) {
+          elem.requestFullscreen();
+        } else if ((elem as any).webkitRequestFullscreen) {
+          (elem as any).webkitRequestFullscreen();
+        } else if ((elem as any).msRequestFullscreen) {
+          (elem as any).msRequestFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        } else if ((document as any).webkitExitFullscreen) {
+          (document as any).webkitExitFullscreen();
+        } else if ((document as any).msExitFullscreen) {
+          (document as any).msExitFullscreen();
+        }
+      }
+    } catch (err) {
+      console.error("Fullscreen error:", err);
+      alert("Fullscreen is not supported on this device/browser.");
     }
   };
 
