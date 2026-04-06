@@ -357,8 +357,20 @@ export default function App() {
   const logout = () => {
     soundService.play('click');
     setJoined(false);
+    setView('lobby');
+    setGameState(null);
+    if (socket && roomId) {
+      socket.emit('leaveRoom', roomId);
+    }
+  };
+
+  const fullLogout = () => {
+    soundService.play('click');
+    setName('');
+    setJoined(false);
     setView('login');
     setGameState(null);
+    localStorage.removeItem('lucifer_poker_name');
   };
   const startGame = () => {
     soundService.play('click');
@@ -575,136 +587,142 @@ export default function App() {
 
   if (view === 'lobby') {
     return (
-      <div className="fixed inset-0 bg-[#050505] text-white font-sans overflow-hidden flex flex-col select-none touch-none">
+      <div className="fixed inset-0 bg-[#0a0a0a] text-white font-sans overflow-hidden flex flex-col select-none touch-none">
+        {/* Immersive Casino Background */}
         <div className="absolute inset-0 z-0 pointer-events-none">
-          <img src={ASSETS.TABLE_BG} alt="Background" className="w-full h-full object-cover opacity-20" referrerPolicy="no-referrer" />
-          <div className="absolute inset-0 bg-gradient-to-b from-black via-transparent to-black" />
+          <img 
+            src="https://images.unsplash.com/photo-1596838132731-3301c3fd4317?q=80&w=2070&auto=format&fit=crop" 
+            alt="Casino Hall" 
+            className="w-full h-full object-cover opacity-20 scale-110 blur-[4px]" 
+            referrerPolicy="no-referrer" 
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-transparent to-black" />
         </div>
 
-        {/* Top Bar */}
-        <header className="relative z-50 p-4 flex items-center justify-between bg-black/40 backdrop-blur-2xl border-b border-white/5">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-zinc-900 rounded-2xl border border-white/10 flex items-center justify-center overflow-hidden">
-              <User className="w-6 h-6 text-white/20" />
+        {/* Header */}
+        <header className="relative z-50 p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3 bg-zinc-900/80 backdrop-blur-xl p-2 pr-6 rounded-2xl border border-white/10 shadow-2xl">
+            <div className="w-12 h-12 bg-gradient-to-br from-red-600 to-red-900 rounded-xl border border-red-500/30 flex items-center justify-center shadow-lg overflow-hidden">
+               <User className="w-7 h-7 text-white/50" />
             </div>
             <div className="flex flex-col">
-              <span className="text-sm font-black uppercase tracking-widest text-emerald-500">{name}</span>
-              <div className="flex items-center gap-2">
+              <span className="text-sm font-black text-white uppercase tracking-tight">{name}</span>
+              <div className="flex items-center gap-1">
                 <Coins className="w-3 h-3 text-yellow-500" />
-                <span className="text-xs font-bold text-white/60">{(currentPlayer?.chips || 50000).toLocaleString()} Chips</span>
+                <span className="text-xs font-black text-yellow-500">{(currentPlayer?.chips || 50000).toLocaleString()}</span>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <button onClick={toggleFullscreen} className="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-colors border border-white/10">
-              {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-            </button>
-            <button onClick={logout} className="p-2 bg-red-600/10 hover:bg-red-600/20 border border-red-500/20 rounded-xl transition-colors">
-              <LogOut className="w-4 h-4 text-red-500" />
-            </button>
+          <div className="flex items-center gap-2">
+             <button onClick={toggleFullscreen} className="p-3 bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 transition-all">
+                {isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+             </button>
+             <button onClick={fullLogout} className="p-3 bg-red-600/10 hover:bg-red-600/20 rounded-xl border border-red-500/20 transition-all group">
+                <LogOut className="w-5 h-5 text-red-500 group-hover:scale-110 transition-transform" />
+             </button>
           </div>
         </header>
 
-        {/* Main Menu */}
-        <main className="relative z-10 flex-1 overflow-y-auto p-4 md:p-8 pb-32">
-          <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
-            {/* Play Now Section */}
-            <div className="space-y-4 bg-emerald-950/20 p-4 rounded-3xl border border-emerald-500/10">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <Play className="w-5 h-5 text-emerald-500" />
-                  <h3 className="text-lg font-black uppercase tracking-tighter">Play Now</h3>
-                </div>
-                <span className="text-[10px] bg-emerald-500/20 text-emerald-500 px-2 py-0.5 rounded-full font-bold border border-emerald-500/30">50L Limit</span>
+        {/* Circular Lobby Layout */}
+        <main className="relative z-10 flex-1 flex items-center justify-center">
+          <div className="relative w-[320px] h-[320px] md:w-[500px] md:h-[500px] flex items-center justify-center">
+            {/* Central Logo Hub */}
+            <motion.div 
+              initial={{ scale: 0, rotate: -180 }}
+              animate={{ scale: 1, rotate: 0 }}
+              className="relative z-20 w-32 h-32 md:w-48 md:h-48 bg-gradient-to-br from-red-600 to-red-950 rounded-full border-4 border-red-500/50 shadow-[0_0_50px_rgba(220,38,38,0.5)] flex items-center justify-center overflow-hidden group"
+            >
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white/20 to-transparent opacity-50" />
+              <div className="text-center z-10">
+                <div className="font-poker text-2xl md:text-4xl text-white leading-none drop-shadow-2xl">LUCIFER</div>
+                <div className="text-[8px] md:text-[10px] font-black text-red-200 uppercase tracking-[0.3em] mt-1">Underworld</div>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                {[...Array(10)].map((_, i) => (
-                  <button 
-                    key={i} 
-                    onClick={() => joinRoom('PLAY_NOW', `table-${i + 1}`)}
-                    className="bg-black/40 backdrop-blur-xl border border-white/5 p-3 rounded-xl hover:bg-emerald-600/20 hover:border-emerald-500/40 transition-all text-left group relative overflow-hidden"
-                  >
-                    <div className="absolute top-0 right-0 p-1 opacity-5 group-hover:opacity-20 transition-opacity">
-                      <Play className="w-8 h-8" />
-                    </div>
-                    <div className="text-[8px] font-bold text-white/30 uppercase mb-0.5">Table {i + 1}</div>
-                    <div className="text-xs font-black group-hover:text-emerald-500 transition-colors">JOIN</div>
-                  </button>
-                ))}
-              </div>
-            </div>
+              {/* Spinning outer ring */}
+              <div className="absolute inset-0 border-4 border-dashed border-red-400/20 rounded-full animate-spin-slow" />
+            </motion.div>
 
-            {/* No Limit Section */}
-            <div className="space-y-4 bg-red-950/20 p-4 rounded-3xl border border-red-500/10">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <Trophy className="w-5 h-5 text-red-500" />
-                  <h3 className="text-lg font-black uppercase tracking-tighter">No Limit</h3>
+            {/* Radial Buttons */}
+            <div className="absolute inset-0">
+              {/* Play Now - Top */}
+              <motion.button
+                initial={{ opacity: 0, y: 50 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+                onClick={() => joinRoom('PLAY_NOW', 'table-1')}
+                className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 group"
+              >
+                <div className="w-24 h-24 md:w-36 md:h-36 bg-gradient-to-b from-emerald-400 to-emerald-800 rounded-full border-4 border-emerald-300/30 shadow-2xl flex flex-col items-center justify-center p-2 transition-all group-hover:scale-110 group-hover:shadow-[0_0_30px_rgba(16,185,129,0.4)]">
+                  <Play className="w-8 h-8 md:w-12 md:h-12 text-white mb-1" />
+                  <span className="font-poker text-xs md:text-xl text-white uppercase">Play Now</span>
                 </div>
-                <span className="text-[10px] bg-red-500/20 text-red-500 px-2 py-0.5 rounded-full font-bold border border-red-500/30">High Stakes</span>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {[...Array(10)].map((_, i) => (
-                  <button 
-                    key={i} 
-                    onClick={() => joinRoom('NO_LIMIT', `nolimit-${i + 1}`)}
-                    className="bg-black/40 backdrop-blur-xl border border-white/5 p-3 rounded-xl hover:bg-red-600/20 hover:border-red-500/40 transition-all text-left group relative overflow-hidden"
-                  >
-                    <div className="absolute top-0 right-0 p-1 opacity-5 group-hover:opacity-20 transition-opacity">
-                      <Trophy className="w-8 h-8" />
-                    </div>
-                    <div className="text-[8px] font-bold text-white/30 uppercase mb-0.5">Table {i + 1}</div>
-                    <div className="text-xs font-black group-hover:text-red-500 transition-colors">JOIN</div>
-                  </button>
-                ))}
-              </div>
-            </div>
+              </motion.button>
 
-            {/* Private & Specials */}
-            <div className="space-y-4">
-              <div className="bg-gradient-to-br from-zinc-900 to-black p-6 rounded-[2rem] border border-white/10 shadow-2xl relative overflow-hidden group">
-                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
-                  <Lock className="w-12 h-12" />
+              {/* No Limit - Right */}
+              <motion.button
+                initial={{ opacity: 0, x: -50 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.2 }}
+                onClick={() => joinRoom('NO_LIMIT', 'nolimit-1')}
+                className="absolute top-1/2 right-0 translate-x-1/2 -translate-y-1/2 group"
+              >
+                <div className="w-24 h-24 md:w-36 md:h-36 bg-gradient-to-b from-orange-400 to-red-800 rounded-full border-4 border-orange-300/30 shadow-2xl flex flex-col items-center justify-center p-2 transition-all group-hover:scale-110 group-hover:shadow-[0_0_30px_rgba(249,115,22,0.4)]">
+                  <Trophy className="w-8 h-8 md:w-12 md:h-12 text-white mb-1" />
+                  <span className="font-poker text-[10px] md:text-lg text-white uppercase leading-none text-center">No Limit<br/>Table</span>
                 </div>
-                <h3 className="text-xl font-black uppercase mb-1">Private Table</h3>
-                <p className="text-[10px] text-white/40 mb-4">Play with friends using a secret code.</p>
-                <div className="flex gap-2">
-                  <input 
-                    type="text" 
-                    placeholder="Code" 
-                    className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-red-500 transition-all"
-                  />
-                  <button className="bg-red-600 px-4 rounded-xl font-black text-xs hover:bg-red-500 transition-all">JOIN</button>
-                </div>
-              </div>
+              </motion.button>
 
-              <div className="bg-gradient-to-br from-yellow-600/20 to-black p-6 rounded-[2rem] border border-yellow-500/20 shadow-2xl relative overflow-hidden group">
-                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:rotate-12 transition-transform">
-                  <Disc className="w-12 h-12" />
+              {/* Private Table - Bottom */}
+              <motion.button
+                initial={{ opacity: 0, y: -50 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                onClick={() => joinRoom('PRIVATE', 'private-' + Math.random().toString(36).substr(2, 5))}
+                className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 group"
+              >
+                <div className="w-24 h-24 md:w-36 md:h-36 bg-gradient-to-b from-purple-500 to-indigo-900 rounded-full border-4 border-purple-300/30 shadow-2xl flex flex-col items-center justify-center p-2 transition-all group-hover:scale-110 group-hover:shadow-[0_0_30px_rgba(139,92,246,0.4)]">
+                  <Lock className="w-8 h-8 md:w-12 md:h-12 text-white mb-1" />
+                  <span className="font-poker text-[10px] md:text-lg text-white uppercase leading-none text-center">Private<br/>Table</span>
                 </div>
-                <h3 className="text-xl font-black uppercase mb-1 text-yellow-500">Lucky Spin</h3>
-                <p className="text-[10px] text-white/40 mb-4">Win up to 20 Crore chips daily!</p>
-                <button onClick={() => setShowSpinWheel(true)} className="w-full bg-yellow-600 p-3 rounded-xl font-black text-xs hover:bg-yellow-500 transition-all text-black">SPIN NOW</button>
-              </div>
+              </motion.button>
+
+              {/* Lucky Spin - Left */}
+              <motion.button
+                initial={{ opacity: 0, x: 50 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.4 }}
+                onClick={() => setShowSpinWheel(true)}
+                className="absolute top-1/2 left-0 -translate-x-1/2 -translate-y-1/2 group"
+              >
+                <div className="w-24 h-24 md:w-36 md:h-36 bg-gradient-to-b from-yellow-400 to-amber-700 rounded-full border-4 border-yellow-300/30 shadow-2xl flex flex-col items-center justify-center p-2 transition-all group-hover:scale-110 group-hover:shadow-[0_0_30px_rgba(234,179,8,0.4)]">
+                  <Disc className="w-8 h-8 md:w-12 md:h-12 text-white mb-1 animate-spin-slow" />
+                  <span className="font-poker text-xs md:text-xl text-white uppercase">Lucky Spin</span>
+                </div>
+              </motion.button>
             </div>
           </div>
         </main>
 
-        {/* Bottom Bar */}
-        <footer className="relative z-50 p-4 bg-black/60 backdrop-blur-2xl border-t border-white/5 flex items-center justify-center gap-8">
-          <button className="flex flex-col items-center gap-1 text-white/40 hover:text-white transition-colors">
-            <CreditCard className="w-5 h-5" />
-            <span className="text-[10px] font-black uppercase tracking-widest">Bonus</span>
-          </button>
-          <button className="flex flex-col items-center gap-1 text-white/40 hover:text-white transition-colors">
-            <Users className="w-5 h-5" />
-            <span className="text-[10px] font-black uppercase tracking-widest">Friends</span>
-          </button>
-          <button className="flex flex-col items-center gap-1 text-white/40 hover:text-white transition-colors">
-            <Settings className="w-5 h-5" />
-            <span className="text-[10px] font-black uppercase tracking-widest">Settings</span>
-          </button>
+        {/* Footer Navigation */}
+        <footer className="relative z-50 p-6 flex items-center justify-center gap-8 md:gap-16">
+           <button className="flex flex-col items-center gap-1 group">
+             <div className="w-10 h-10 bg-white/5 rounded-xl border border-white/10 flex items-center justify-center group-hover:bg-white/10 transition-all">
+               <Users className="w-5 h-5 text-white/40 group-hover:text-white" />
+             </div>
+             <span className="text-[8px] font-black uppercase tracking-widest text-white/20 group-hover:text-white/60">Friends</span>
+           </button>
+           <button className="flex flex-col items-center gap-1 group">
+             <div className="w-10 h-10 bg-white/5 rounded-xl border border-white/10 flex items-center justify-center group-hover:bg-white/10 transition-all">
+               <Plus className="w-5 h-5 text-white/40 group-hover:text-white" />
+             </div>
+             <span className="text-[8px] font-black uppercase tracking-widest text-white/20 group-hover:text-white/60">Shop</span>
+           </button>
+           <button className="flex flex-col items-center gap-1 group">
+             <div className="w-10 h-10 bg-white/5 rounded-xl border border-white/10 flex items-center justify-center group-hover:bg-white/10 transition-all">
+               <Settings className="w-5 h-5 text-white/40 group-hover:text-white" />
+             </div>
+             <span className="text-[8px] font-black uppercase tracking-widest text-white/20 group-hover:text-white/60">Settings</span>
+           </button>
         </footer>
       </div>
     );
@@ -788,7 +806,7 @@ export default function App() {
           )}
 
           <button 
-            onClick={() => setJoined(false)} 
+            onClick={logout} 
             className="p-2 bg-red-600/10 hover:bg-red-600/20 border border-red-500/20 rounded-xl transition-colors group"
             title="Exit Game"
           >
@@ -1093,7 +1111,15 @@ export default function App() {
                           <span className="text-xs md:text-2xl leading-none">{(currentPlayer?.isBlind ? gameState?.lastBet : (gameState?.lastBet || 0) * 2)?.toLocaleString()} <span className="text-[8px] md:text-xs opacity-60">$(USD)</span></span>
                         </div>
                       </button>
-                      {gameState?.type !== 'PLAY_NOW' && (
+                      {gameState?.type === 'PLAY_NOW' ? (
+                        <button 
+                          onClick={() => takeAction('raise', gameState.lastBet)} 
+                          className="bg-red-700 text-white font-black px-3 md:px-8 hover:bg-red-600 transition-all active:scale-95 flex items-center justify-center"
+                          title="Double Bet"
+                        >
+                          <span className="text-[8px] md:text-xs">DOUBLE</span>
+                        </button>
+                      ) : (
                         <>
                           <button 
                             onClick={() => takeAction('raise', 100000)} 
