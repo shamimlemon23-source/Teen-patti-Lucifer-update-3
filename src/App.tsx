@@ -154,6 +154,7 @@ export default function App() {
   const [adminSearch, setAdminSearch] = useState('');
   const [adminMessage, setAdminMessage] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
+  const [lobbyChips, setLobbyChips] = useState<number>(50000);
   const [showSplash, setShowSplash] = useState(true);
   const [sideShowPrompt, setSideShowPrompt] = useState<{ fromName: string } | null>(null);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
@@ -197,6 +198,7 @@ export default function App() {
           setIsSpinning(false);
           setSpinResult(data.prize);
           setLastSpinTime(data.lastSpin);
+          setLobbyChips(data.chips);
           confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 } });
           setTimeout(() => setSpinResult(null), 5000);
         }, 500);
@@ -349,10 +351,28 @@ export default function App() {
   const login = async () => {
     if (!name) return;
     soundService.play('click');
-    // We don't actually join a room here, just set the name and move to lobby
-    // The server will verify the password when we actually join a room
-    setView('lobby');
+    socket?.emit('login', { name, password });
   };
+
+  useEffect(() => {
+    if (!socket) return;
+
+    socket.on('loginSuccess', (data: { name: string, chips: number, last_spin: number }) => {
+      setName(data.name);
+      setLobbyChips(data.chips);
+      setView('lobby');
+      localStorage.setItem('lucifer_poker_name', data.name);
+    });
+
+    socket.on('chipsUpdated', (newChips: number) => {
+      setLobbyChips(newChips);
+    });
+
+    return () => {
+      socket.off('loginSuccess');
+      socket.off('chipsUpdated');
+    };
+  }, [socket]);
 
   const logout = () => {
     soundService.play('click');
@@ -609,7 +629,7 @@ export default function App() {
               <span className="text-sm font-black text-white uppercase tracking-tight">{name}</span>
               <div className="flex items-center gap-1">
                 <Coins className="w-3 h-3 text-yellow-500" />
-                <span className="text-xs font-black text-yellow-500">{(currentPlayer?.chips || 50000).toLocaleString()}</span>
+                <span className="text-xs font-black text-yellow-500">{lobbyChips.toLocaleString()}</span>
               </div>
             </div>
           </div>
@@ -626,17 +646,17 @@ export default function App() {
 
         {/* Circular Lobby Layout */}
         <main className="relative z-10 flex-1 flex items-center justify-center">
-          <div className="relative w-[320px] h-[320px] md:w-[500px] md:h-[500px] flex items-center justify-center">
+          <div className="relative w-[280px] h-[280px] md:w-[400px] md:h-[400px] flex items-center justify-center">
             {/* Central Logo Hub */}
             <motion.div 
               initial={{ scale: 0, rotate: -180 }}
               animate={{ scale: 1, rotate: 0 }}
-              className="relative z-20 w-32 h-32 md:w-48 md:h-48 bg-gradient-to-br from-red-600 to-red-950 rounded-full border-4 border-red-500/50 shadow-[0_0_50px_rgba(220,38,38,0.5)] flex items-center justify-center overflow-hidden group"
+              className="relative z-20 w-28 h-28 md:w-40 md:h-40 bg-gradient-to-br from-red-600 to-red-950 rounded-full border-4 border-red-500/50 shadow-[0_0_50px_rgba(220,38,38,0.5)] flex items-center justify-center overflow-hidden group"
             >
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white/20 to-transparent opacity-50" />
               <div className="text-center z-10">
-                <div className="font-poker text-2xl md:text-4xl text-white leading-none drop-shadow-2xl">LUCIFER</div>
-                <div className="text-[8px] md:text-[10px] font-black text-red-200 uppercase tracking-[0.3em] mt-1">Underworld</div>
+                <div className="font-poker text-xl md:text-3xl text-white leading-none drop-shadow-2xl">LUCIFER</div>
+                <div className="text-[7px] md:text-[9px] font-black text-red-200 uppercase tracking-[0.3em] mt-1">Underworld</div>
               </div>
               {/* Spinning outer ring */}
               <div className="absolute inset-0 border-4 border-dashed border-red-400/20 rounded-full animate-spin-slow" />
@@ -650,11 +670,11 @@ export default function App() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 }}
                 onClick={() => joinRoom('PLAY_NOW', 'table-1')}
-                className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 group"
+                className="absolute top-4 left-1/2 -translate-x-1/2 -translate-y-1/2 group"
               >
-                <div className="w-24 h-24 md:w-36 md:h-36 bg-gradient-to-b from-emerald-400 to-emerald-800 rounded-full border-4 border-emerald-300/30 shadow-2xl flex flex-col items-center justify-center p-2 transition-all group-hover:scale-110 group-hover:shadow-[0_0_30px_rgba(16,185,129,0.4)]">
-                  <Play className="w-8 h-8 md:w-12 md:h-12 text-white mb-1" />
-                  <span className="font-poker text-xs md:text-xl text-white uppercase">Play Now</span>
+                <div className="w-20 h-20 md:w-32 md:h-32 bg-gradient-to-b from-emerald-400 to-emerald-800 rounded-full border-4 border-emerald-300/30 shadow-2xl flex flex-col items-center justify-center p-2 transition-all group-hover:scale-110 group-hover:shadow-[0_0_30px_rgba(16,185,129,0.4)]">
+                  <Play className="w-6 h-6 md:w-10 md:h-10 text-white mb-1" />
+                  <span className="font-poker text-[8px] md:text-lg text-white uppercase">Play Now</span>
                 </div>
               </motion.button>
 
@@ -664,11 +684,11 @@ export default function App() {
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.2 }}
                 onClick={() => joinRoom('NO_LIMIT', 'nolimit-1')}
-                className="absolute top-1/2 right-0 translate-x-1/2 -translate-y-1/2 group"
+                className="absolute top-1/2 right-4 translate-x-1/2 -translate-y-1/2 group"
               >
-                <div className="w-24 h-24 md:w-36 md:h-36 bg-gradient-to-b from-orange-400 to-red-800 rounded-full border-4 border-orange-300/30 shadow-2xl flex flex-col items-center justify-center p-2 transition-all group-hover:scale-110 group-hover:shadow-[0_0_30px_rgba(249,115,22,0.4)]">
-                  <Trophy className="w-8 h-8 md:w-12 md:h-12 text-white mb-1" />
-                  <span className="font-poker text-[10px] md:text-lg text-white uppercase leading-none text-center">No Limit<br/>Table</span>
+                <div className="w-20 h-20 md:w-32 md:h-32 bg-gradient-to-b from-orange-400 to-red-800 rounded-full border-4 border-orange-300/30 shadow-2xl flex flex-col items-center justify-center p-2 transition-all group-hover:scale-110 group-hover:shadow-[0_0_30px_rgba(249,115,22,0.4)]">
+                  <Trophy className="w-6 h-6 md:w-10 md:h-10 text-white mb-1" />
+                  <span className="font-poker text-[8px] md:text-lg text-white uppercase leading-none text-center">No Limit<br/>Table</span>
                 </div>
               </motion.button>
 
@@ -677,12 +697,17 @@ export default function App() {
                 initial={{ opacity: 0, y: -50 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3 }}
-                onClick={() => joinRoom('PRIVATE', 'private-' + Math.random().toString(36).substr(2, 5))}
-                className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 group"
+                onClick={() => {
+                  const code = prompt("Enter Table Code (Number):");
+                  if (code && !isNaN(Number(code))) {
+                    joinRoom('PRIVATE', 'private-' + code);
+                  }
+                }}
+                className="absolute bottom-4 left-1/2 -translate-x-1/2 translate-y-1/2 group"
               >
-                <div className="w-24 h-24 md:w-36 md:h-36 bg-gradient-to-b from-purple-500 to-indigo-900 rounded-full border-4 border-purple-300/30 shadow-2xl flex flex-col items-center justify-center p-2 transition-all group-hover:scale-110 group-hover:shadow-[0_0_30px_rgba(139,92,246,0.4)]">
-                  <Lock className="w-8 h-8 md:w-12 md:h-12 text-white mb-1" />
-                  <span className="font-poker text-[10px] md:text-lg text-white uppercase leading-none text-center">Private<br/>Table</span>
+                <div className="w-20 h-20 md:w-32 md:h-32 bg-gradient-to-b from-purple-500 to-indigo-900 rounded-full border-4 border-purple-300/30 shadow-2xl flex flex-col items-center justify-center p-2 transition-all group-hover:scale-110 group-hover:shadow-[0_0_30px_rgba(139,92,246,0.4)]">
+                  <Lock className="w-6 h-6 md:w-10 md:h-10 text-white mb-1" />
+                  <span className="font-poker text-[8px] md:text-lg text-white uppercase leading-none text-center">Private<br/>Table</span>
                 </div>
               </motion.button>
 
@@ -692,11 +717,11 @@ export default function App() {
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.4 }}
                 onClick={() => setShowSpinWheel(true)}
-                className="absolute top-1/2 left-0 -translate-x-1/2 -translate-y-1/2 group"
+                className="absolute top-1/2 left-4 -translate-x-1/2 -translate-y-1/2 group"
               >
-                <div className="w-24 h-24 md:w-36 md:h-36 bg-gradient-to-b from-yellow-400 to-amber-700 rounded-full border-4 border-yellow-300/30 shadow-2xl flex flex-col items-center justify-center p-2 transition-all group-hover:scale-110 group-hover:shadow-[0_0_30px_rgba(234,179,8,0.4)]">
-                  <Disc className="w-8 h-8 md:w-12 md:h-12 text-white mb-1 animate-spin-slow" />
-                  <span className="font-poker text-xs md:text-xl text-white uppercase">Lucky Spin</span>
+                <div className="w-20 h-20 md:w-32 md:h-32 bg-gradient-to-b from-yellow-400 to-amber-700 rounded-full border-4 border-yellow-300/30 shadow-2xl flex flex-col items-center justify-center p-2 transition-all group-hover:scale-110 group-hover:shadow-[0_0_30px_rgba(234,179,8,0.4)]">
+                  <Disc className="w-6 h-6 md:w-10 md:h-10 text-white mb-1 animate-spin-slow" />
+                  <span className="font-poker text-[8px] md:text-lg text-white uppercase">Lucky Spin</span>
                 </div>
               </motion.button>
             </div>
@@ -787,11 +812,22 @@ export default function App() {
 
           {joined && (
             <button 
-              onClick={() => setShowSpinWheel(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-yellow-500/30 bg-yellow-600/10 text-yellow-400 hover:bg-yellow-600/20 transition-all"
+              onClick={() => {
+                const lastClaim = localStorage.getItem(`last_claim_${name}`);
+                const now = Date.now();
+                if (lastClaim && now - parseInt(lastClaim) < 24 * 60 * 60 * 1000) {
+                  const hoursLeft = Math.ceil((24 * 60 * 60 * 1000 - (now - parseInt(lastClaim))) / (60 * 60 * 1000));
+                  alert(`You can claim again in ${hoursLeft} hours.`);
+                  return;
+                }
+                socket?.emit('addChips', { name, amount: 20000 });
+                localStorage.setItem(`last_claim_${name}`, now.toString());
+                alert("20,000 chips claimed!");
+              }}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-emerald-500/30 bg-emerald-600/10 text-emerald-400 hover:bg-emerald-600/20 transition-all"
             >
-              <Disc className={`w-4 h-4 ${isSpinning ? 'animate-spin' : ''}`} />
-              <span className="text-xs font-black uppercase hidden md:inline">Spin</span>
+              <Coins className="w-4 h-4" />
+              <span className="text-xs font-black uppercase hidden md:inline">Claim 20k</span>
             </button>
           )}
 
@@ -1303,11 +1339,11 @@ export default function App() {
                   className="w-full h-full rounded-full border-8 border-yellow-500/30 relative overflow-hidden shadow-[0_0_50px_rgba(234,179,8,0.3)] bg-zinc-900"
                 >
                   {[
-                    { prize: '1 Cr', color: 'bg-red-600' },
-                    { prize: '2 Cr', color: 'bg-zinc-800' },
-                    { prize: '5 Cr', color: 'bg-red-700' },
-                    { prize: '10 Cr', color: 'bg-zinc-900' },
-                    { prize: '20 Cr', color: 'bg-yellow-600' }
+                    { prize: '10k', color: 'bg-red-600' },
+                    { prize: '20k', color: 'bg-zinc-800' },
+                    { prize: '30k', color: 'bg-red-700' },
+                    { prize: '50k', color: 'bg-zinc-900' },
+                    { prize: '1lac', color: 'bg-yellow-600' }
                   ].map((item, i) => (
                     <div 
                       key={i}
