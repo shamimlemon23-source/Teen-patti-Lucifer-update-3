@@ -369,7 +369,7 @@ async function startServer() {
     if (winner) {
       game.winner = winner.name;
       winner.chips += game.pot;
-      if (!winner.isBot) updatePlayerChips(winner.name, winner.chips);
+      if (!winner.isBot && game.type !== ROOM_TYPES.PRIVATE) updatePlayerChips(winner.name, winner.chips);
       console.log(`Winner: ${winner.name}, Pot: ${game.pot}`);
     }
     game.gameStarted = false;
@@ -390,7 +390,7 @@ async function startServer() {
       if (active.length === 1) {
         game.winner = active[0].name;
         active[0].chips += game.pot;
-        if (!active[0].isBot) updatePlayerChips(active[0].name, active[0].chips);
+        if (!active[0].isBot && game.type !== ROOM_TYPES.PRIVATE) updatePlayerChips(active[0].name, active[0].chips);
       }
       game.gameStarted = false;
       game.turnStartTime = undefined;
@@ -470,7 +470,7 @@ async function startServer() {
         p.isBlind = true; 
         p.chips -= 1000; 
         game.pot += 1000;
-        if (!p.isBot) updatePlayerChips(p.name, p.chips);
+        if (!p.isBot && game.type !== ROOM_TYPES.PRIVATE) updatePlayerChips(p.name, p.chips);
       });
       game.currentTurn = 0; 
       emitGameState(rid);
@@ -492,6 +492,21 @@ async function startServer() {
 
   io.on("connection", (socket) => {
     console.log(`New connection: ${socket.id}`);
+
+    socket.on("addChips", async ({ name, amount }) => {
+      try {
+        const userRef = doc(db, "users", name.toLowerCase());
+        const userSnap = await getDoc(userRef);
+        if (userSnap.exists()) {
+          const currentChips = userSnap.data().chips || 0;
+          const newChips = currentChips + amount;
+          await updateDoc(userRef, { chips: newChips });
+          socket.emit("chipsUpdated", newChips);
+        }
+      } catch (error) {
+        console.error("Error adding chips:", error);
+      }
+    });
 
     socket.on("disconnect", () => {
       console.log(`Player disconnected: ${socket.id}`);
@@ -565,6 +580,9 @@ async function startServer() {
         return;
       }
 
+      // For PRIVATE tables, give unlimited chips (1 Billion)
+      const initialChips = type === ROOM_TYPES.PRIVATE ? 1000000000 : dbData.chips;
+
       if (!rooms[rid]) {
         rooms[rid] = { 
           players: [
@@ -599,12 +617,12 @@ async function startServer() {
       
       if (existingPlayerIndex !== -1 && !game.players[existingPlayerIndex].isBot) {
         game.players[existingPlayerIndex].id = socket.id;
-        game.players[existingPlayerIndex].chips = dbData.chips;
+        game.players[existingPlayerIndex].chips = initialChips;
       } else {
         game.players.push({ 
           id: socket.id, 
           name: playerName, 
-          chips: dbData.chips, 
+          chips: initialChips, 
           last_spin: dbData.last_spin,
           hand: [], 
           isFolded: false, 
@@ -703,13 +721,13 @@ async function startServer() {
           if (player.chips >= bet) {
             player.chips -= bet;
             game.pot += bet;
-            if (!player.isBot) updatePlayerChips(player.name, player.chips);
+            if (!player.isBot && game.type !== ROOM_TYPES.PRIVATE) updatePlayerChips(player.name, player.chips);
             return resolveShowdown(rid);
           }
         }
       }
       
-      if (!player.isBot) updatePlayerChips(player.name, player.chips);
+      if (!player.isBot && game.type !== ROOM_TYPES.PRIVATE) updatePlayerChips(player.name, player.chips);
       nextTurn(rid);
     });
 
@@ -735,7 +753,7 @@ async function startServer() {
       if (player.chips < bet) return;
       player.chips -= bet;
       game.pot += bet;
-      if (!player.isBot) updatePlayerChips(player.name, player.chips);
+      if (!player.isBot && game.type !== ROOM_TYPES.PRIVATE) updatePlayerChips(player.name, player.chips);
 
       if (prevPlayer.isBot) {
         // Bot always accepts side show for now
