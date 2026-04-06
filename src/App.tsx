@@ -157,7 +157,6 @@ export default function App() {
   const [adminMessage, setAdminMessage] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [lobbyChips, setLobbyChips] = useState<number>(50000);
-  const [showSplash, setShowSplash] = useState(true);
   const [sideShowPrompt, setSideShowPrompt] = useState<{ fromName: string } | null>(null);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -337,7 +336,7 @@ export default function App() {
   }, [gameState?.turnStartTime, gameState?.turnDuration, gameState?.currentTurn]);
 
   useEffect(() => {
-    const timer = setTimeout(() => setShowSplash(false), 3000);
+    const timer = setTimeout(() => setView('login'), 3000);
     return () => clearTimeout(timer);
   }, []);
 
