@@ -29,7 +29,8 @@ import {
   getDocs, 
   writeBatch,
   initializeFirestore,
-  getDocFromServer
+  getDocFromServer,
+  deleteDoc
 } from 'firebase/firestore';
 
 dotenv.config();
@@ -938,7 +939,7 @@ async function startServer() {
     };
 
     socket.on("getAdminStats", async ({ adminName, adminPassword }) => {
-      if (adminName?.trim().toUpperCase() === "LUCIFER_DEV_777" && adminPassword === "LUCIFER_PASS_999") {
+      if (adminName?.trim().toUpperCase() === "LUCIFER_ADMIN_777" && adminPassword === "LUCIFER_PASS_999") {
         await refreshAdminStats();
       } else {
         socket.emit("adminMessage", "Invalid Admin Credentials");
@@ -947,7 +948,7 @@ async function startServer() {
 
     socket.on("adminAction", async ({ adminName, adminPassword, type, targetName, amount }) => {
       // Robust admin check
-      const isAdminName = adminName?.trim().toUpperCase() === "LUCIFER_DEV_777";
+      const isAdminName = adminName?.trim().toUpperCase() === "LUCIFER_ADMIN_777";
       const isAdminPass = adminPassword === "LUCIFER_PASS_999";
 
       if (isAdminName && isAdminPass) {
@@ -1015,6 +1016,10 @@ async function startServer() {
               await updateDoc(playerRef, { chips: setVal });
             } else {
               await setDoc(playerRef, { name: target.toLowerCase().trim(), chips: setVal, last_spin: 0, password: '' });
+            }
+          } else if (type === "delete") {
+            if (snap.exists()) {
+              await deleteDoc(playerRef);
             }
           }
 
