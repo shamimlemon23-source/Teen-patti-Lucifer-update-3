@@ -493,6 +493,20 @@ async function startServer() {
   io.on("connection", (socket) => {
     console.log(`New connection: ${socket.id}`);
 
+    socket.on("login", async ({ name, password }) => {
+      try {
+        const dbData = await getPlayerChips(name, password);
+        if (dbData.error) {
+          socket.emit("error", dbData.error);
+          return;
+        }
+        socket.emit("loginSuccess", { name, chips: dbData.chips, last_spin: dbData.last_spin });
+      } catch (error) {
+        console.error("Login error:", error);
+        socket.emit("error", "Login failed. Please try again.");
+      }
+    });
+
     socket.on("addChips", async ({ name, amount }) => {
       try {
         const userRef = doc(db, "users", name.toLowerCase());
@@ -505,6 +519,52 @@ async function startServer() {
         }
       } catch (error) {
         console.error("Error adding chips:", error);
+      }
+    });
+
+    socket.on("leaveRoom", (roomId) => {
+      const rid = roomId.trim().toLowerCase();
+      const game = rooms[rid];
+      if (!game) return;
+      
+      const playerIndex = game.players.findIndex((p: any) => p.id === socket.id);
+      if (playerIndex !== -1) {
+        const player = game.players[playerIndex];
+        console.log(`Player ${player.name} leaving room ${rid}`);
+        
+        const wasTheirTurn = game.gameStarted && game.currentTurn === playerIndex;
+        game.players.splice(playerIndex, 1);
+        
+        if (game.gameStarted) {
+          if (playerIndex < game.currentTurn) {
+            game.currentTurn--;
+          }
+          
+          const active = game.players.filter((p: any) => !p.isFolded);
+          if (active.length <= 1) {
+            resolveShowdown(rid);
+          } else if (wasTheirTurn || game.currentTurn >= game.players.length) {
+            game.currentTurn = game.currentTurn % (game.players.length || 1);
+            while (game.players[game.currentTurn] && game.players[game.currentTurn].isFolded) {
+              game.currentTurn = (game.currentTurn + 1) % game.players.length;
+            }
+            if (game.players[game.currentTurn]?.isBot) {
+              handleBotTurn(rid);
+            } else {
+              startTurnTimer(rid);
+            }
+          }
+        }
+        
+        const realPlayers = game.players.filter((p: any) => !p.isBot);
+        if (realPlayers.length === 0) {
+          clearTurnTimer(rid);
+          game.gameStarted = false;
+          game.winner = null;
+        }
+        
+        socket.leave(rid);
+        emitGameState(rid);
       }
     });
 
@@ -574,14 +634,22 @@ async function startServer() {
         return;
       }
 
-      // Check chip limit for PLAY_NOW
+      // For PRIVATE tables, check room password if it already exists
+      if (type === ROOM_TYPES.PRIVATE) {
+        if (rooms[rid] && rooms[rid].password && rooms[rid].password !== password) {
+          socket.emit("error", "Incorrect table code!");
+          return;
+        }
+      }
+
+      // For PLAY_NOW tables, check chip limit
       if (type === ROOM_TYPES.PLAY_NOW && dbData.chips > CHIP_LIMITS.PLAY_NOW) {
         socket.emit("error", "You have more than 50 Lac chips. Please join a No Limit Table!");
         return;
       }
 
-      // For PRIVATE tables, give unlimited chips (1 Billion)
-      const initialChips = type === ROOM_TYPES.PRIVATE ? 1000000000 : dbData.chips;
+      // Use actual chips for all tables now
+      const initialChips = dbData.chips;
 
       if (!rooms[rid]) {
         rooms[rid] = { 
@@ -595,7 +663,8 @@ async function startServer() {
           winner: null, 
           deck: [], 
           roundCount: 0,
-          type: type
+          type: type,
+          password: type === ROOM_TYPES.PRIVATE ? password : null // Set room password for private tables
         };
       }
       const game = rooms[rid];
@@ -686,14 +755,15 @@ async function startServer() {
           game.pot += bet;
         }
       } else if (action === "raise") {
-        // Check if raise is allowed in this room type
+        let newLastBet;
         if (game.type === ROOM_TYPES.PLAY_NOW) {
-          socket.emit("error", "Custom raises are not allowed in Play Now tables. Only double chaal is permitted.");
-          return;
+          // In PLAY_NOW, only double is allowed
+          newLastBet = game.lastBet * 2;
+        } else {
+          const raiseAmount = parseInt(amount) || 100000;
+          newLastBet = game.lastBet + raiseAmount;
         }
 
-        const raiseAmount = parseInt(amount) || 100000;
-        const newLastBet = game.lastBet + raiseAmount;
         const bet = player.isBlind ? newLastBet : newLastBet * 2;
         
         if (player.chips < bet) {
