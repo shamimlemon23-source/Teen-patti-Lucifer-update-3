@@ -168,7 +168,7 @@ export default function App() {
   const [lastSpinTime, setLastSpinTime] = useState<number>(0);
   const [soundSettings, setSoundSettings] = useState(soundService.getSettings());
 
-  const isAdmin = useMemo(() => name.trim().toUpperCase() === 'LUCIFER_DEV_777', [name]);
+  const isAdmin = useMemo(() => name.trim().toUpperCase() === 'LUCIFER_ADMIN_777', [name]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -511,7 +511,7 @@ export default function App() {
 
   const refreshAdminStats = () => socket?.emit('getAdminStats', { adminName: name, adminPassword });
   
-  const adminAction = (targetName: string | null, type: 'add' | 'reset' | 'set' | 'resetAll', amount: number = 0) => {
+  const adminAction = (targetName: string | null, type: 'add' | 'reset' | 'set' | 'resetAll' | 'delete', amount: number = 0) => {
     socket?.emit('adminAction', { adminName: name, adminPassword, targetName, type, amount });
   };
 
@@ -709,14 +709,14 @@ export default function App() {
         </div>
 
         {/* Header */}
-        <header className="relative z-50 p-4 flex items-center justify-between">
-          <div className="flex items-center gap-3 bg-zinc-900/80 backdrop-blur-xl p-2 pr-6 rounded-2xl border border-white/10 shadow-2xl">
-            <div className="relative group">
-              <div className="w-12 h-12 bg-gradient-to-br from-red-600 to-red-900 rounded-xl border border-red-500/30 flex items-center justify-center shadow-lg overflow-hidden">
+        <header className="relative z-50 p-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 bg-zinc-900/80 backdrop-blur-xl p-2 pr-4 rounded-2xl border border-white/10 shadow-2xl min-w-0 max-w-[60%]">
+            <div className="relative group shrink-0">
+              <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-red-600 to-red-900 rounded-xl border border-red-500/30 flex items-center justify-center shadow-lg overflow-hidden">
                 {profilePic ? (
                   <img src={profilePic} alt="Profile" className="w-full h-full object-cover" />
                 ) : (
-                  <User className="w-7 h-7 text-white/50" />
+                  <User className="w-6 h-6 md:w-7 md:h-7 text-white/50" />
                 )}
                 <label className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer transition-opacity">
                   <Camera className="w-4 h-4 text-white" />
@@ -725,30 +725,30 @@ export default function App() {
               </div>
               <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-emerald-500 border-2 border-[#0a0a0a] rounded-full" />
             </div>
-            <div className="flex flex-col">
-              <span className="text-sm font-black text-white uppercase tracking-tight">{name}</span>
+            <div className="flex flex-col min-w-0 overflow-hidden">
+              <span className="text-xs md:text-sm font-black text-white uppercase tracking-tight truncate">{name}</span>
               <div className="flex items-center gap-1">
-                <Coins className="w-3 h-3 text-yellow-500" />
-                <span className="text-xs font-black text-yellow-500">{lobbyChips.toLocaleString()}</span>
+                <Coins className="w-3 h-3 text-yellow-500 shrink-0" />
+                <span className="text-[10px] md:text-xs font-black text-yellow-500 truncate">{lobbyChips.toLocaleString()}</span>
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
              {isAdmin && (
                <button 
                  onClick={openAdminPanel}
-                 className="p-3 bg-red-600/10 hover:bg-red-600/20 rounded-xl border border-red-500/20 transition-all text-red-500"
+                 className="p-2 md:p-3 bg-red-600/10 hover:bg-red-600/20 rounded-xl border border-red-500/20 transition-all text-red-500"
                  title="Admin Panel"
                >
-                 <Trophy className="w-5 h-5" />
+                 <Trophy className="w-4 h-4 md:w-5 md:h-5" />
                </button>
              )}
-             <button onClick={toggleFullscreen} className="p-3 bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 transition-all">
-                {isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
+             <button onClick={toggleFullscreen} className="p-2 md:p-3 bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 transition-all">
+                {isFullscreen ? <Minimize2 className="w-4 h-4 md:w-5 md:h-5" /> : <Maximize2 className="w-4 h-4 md:w-5 md:h-5" />}
              </button>
-             <button onClick={fullLogout} className="p-3 bg-red-600/10 hover:bg-red-600/20 rounded-xl border border-red-500/20 transition-all group">
-                <LogOut className="w-5 h-5 text-red-500 group-hover:scale-110 transition-transform" />
+             <button onClick={fullLogout} className="p-2 md:p-3 bg-red-600/10 hover:bg-red-600/20 rounded-xl border border-red-500/20 transition-all group">
+                <LogOut className="w-4 h-4 md:w-5 md:h-5 text-red-500 group-hover:scale-110 transition-transform" />
              </button>
           </div>
         </header>
@@ -902,6 +902,7 @@ export default function App() {
                               <button onClick={() => handleAdminAdd(stat.name)} className="p-1.5 md:p-2 bg-green-600/10 hover:bg-green-600/20 border border-green-500/20 rounded-lg text-green-500 text-[8px] md:text-[10px] font-black uppercase">Add</button>
                               <button onClick={() => handleAdminSet(stat.name)} className="p-1.5 md:p-2 bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/20 rounded-lg text-blue-500 text-[8px] md:text-[10px] font-black uppercase">Set</button>
                               <button onClick={() => adminAction(stat.name, 'reset')} className="p-1.5 md:p-2 bg-red-600/10 hover:bg-red-600/20 border border-red-500/20 rounded-lg text-red-500 text-[8px] md:text-[10px] font-black uppercase">Reset</button>
+                              <button onClick={() => { if(confirm(`Delete ${stat.name}?`)) adminAction(stat.name, 'delete'); }} className="p-1.5 md:p-2 bg-zinc-600/10 hover:bg-zinc-600/20 border border-zinc-500/20 rounded-lg text-zinc-500 text-[8px] md:text-[10px] font-black uppercase">Del</button>
                             </div>
                           </div>
                         ))}
