@@ -24,7 +24,8 @@ import {
   VolumeX,
   Music,
   CreditCard,
-  Camera
+  Camera,
+  Search
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { soundService } from './services/soundService.js';
@@ -169,6 +170,12 @@ export default function App() {
   const [soundSettings, setSoundSettings] = useState(soundService.getSettings());
 
   const isAdmin = useMemo(() => name.trim().toUpperCase() === 'LUCIFER_DEV_777', [name]);
+
+  useEffect(() => {
+    if (isAdmin && password && !adminPassword) {
+      setAdminPassword(password);
+    }
+  }, [isAdmin, password, adminPassword]);
 
   useEffect(() => {
     const handleFirstInteraction = () => {
@@ -362,6 +369,7 @@ export default function App() {
       soundService.play('click');
       soundService.init(); 
       const rid = tableId || roomId;
+      setRoomId(rid);
       socket.emit('joinRoom', { roomId: rid, name, password, roomType: type }); 
       setJoined(true); 
       setView('game');
@@ -708,6 +716,15 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-2">
+             {isAdmin && (
+               <button 
+                 onClick={openAdminPanel}
+                 className="p-3 bg-red-600/10 hover:bg-red-600/20 rounded-xl border border-red-500/20 transition-all text-red-500"
+                 title="Admin Panel"
+               >
+                 <Trophy className="w-5 h-5" />
+               </button>
+             )}
              <button onClick={toggleFullscreen} className="p-3 bg-white/5 hover:bg-white/10 rounded-xl border border-white/10 transition-all">
                 {isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
              </button>
@@ -822,6 +839,159 @@ export default function App() {
              <span className="text-[8px] font-black uppercase tracking-widest text-white/20 group-hover:text-white/60">Settings</span>
            </button>
         </footer>
+
+        {/* Modals available in Lobby */}
+        <AnimatePresence>
+          {showAdminPanel && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowAdminPanel(false)} className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
+              <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full max-w-2xl bg-zinc-900 border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
+                <div className="p-6 border-b border-white/5 flex items-center justify-between bg-black/20">
+                  <div className="flex items-center gap-3">
+                    <Trophy className="w-6 h-6 text-red-500" />
+                    <h2 className="text-xl font-black uppercase tracking-tighter">Lucifer Admin</h2>
+                  </div>
+                  <button onClick={() => setShowAdminPanel(false)} className="p-2 hover:bg-white/5 rounded-xl transition-colors">
+                    <LogOut className="w-5 h-5 text-white/40" />
+                  </button>
+                </div>
+                
+                <div className="p-6">
+                  <div className="flex gap-2 mb-6 bg-black/40 p-1 rounded-xl border border-white/5">
+                    <button onClick={() => setAdminTab('players')} className={`flex-1 py-3 rounded-lg font-black uppercase text-xs transition-all ${adminTab === 'players' ? 'bg-red-600 text-white shadow-lg' : 'text-white/40 hover:text-white'}`}>Active Players</button>
+                    <button onClick={() => setAdminTab('manual')} className={`flex-1 py-3 rounded-lg font-black uppercase text-xs transition-all ${adminTab === 'manual' ? 'bg-red-600 text-white shadow-lg' : 'text-white/40 hover:text-white'}`}>Manual Action</button>
+                  </div>
+
+                  {adminTab === 'players' ? (
+                    <div className="space-y-4">
+                      <div className="relative">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
+                        <input type="text" value={adminSearch} onChange={e => setAdminSearch(e.target.value)} placeholder="Search players..." className="w-full bg-black/40 border border-white/10 p-4 pl-12 rounded-xl outline-none focus:border-red-500/50 transition-all font-bold" />
+                      </div>
+                      <div className="max-h-[300px] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                        {adminStats.filter(s => s.name.toLowerCase().includes(adminSearch.toLowerCase())).map((stat, i) => (
+                          <div key={i} className="bg-black/40 p-4 rounded-xl border border-white/5 flex items-center justify-between group hover:border-red-500/30 transition-all">
+                            <div className="flex flex-col">
+                              <span className="font-black text-white uppercase tracking-tight">{stat.name}</span>
+                              <span className="text-[10px] text-white/40 font-bold uppercase tracking-widest">UID: {stat.id?.slice(0,8)}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-1 text-yellow-500 font-black text-xs mr-4">
+                                <Coins className="w-3 h-3 md:w-4 md:h-4" />
+                                {isFinite(Number(stat.chips)) ? Number(stat.chips).toLocaleString() : '0'} $(USD)
+                              </div>
+                              <button onClick={() => handleAdminAdd(stat.name)} className="p-1.5 md:p-2 bg-green-600/10 hover:bg-green-600/20 border border-green-500/20 rounded-lg text-green-500 text-[8px] md:text-[10px] font-black uppercase">Add</button>
+                              <button onClick={() => handleAdminSet(stat.name)} className="p-1.5 md:p-2 bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/20 rounded-lg text-blue-500 text-[8px] md:text-[10px] font-black uppercase">Set</button>
+                              <button onClick={() => adminAction(stat.name, 'reset')} className="p-1.5 md:p-2 bg-red-600/10 hover:bg-red-600/20 border border-red-500/20 rounded-lg text-red-500 text-[8px] md:text-[10px] font-black uppercase">Reset</button>
+                            </div>
+                          </div>
+                        ))}
+                        {adminStats.length === 0 && (
+                          <div className="text-center py-8 text-white/20 uppercase font-black tracking-widest">No players found</div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <input type="text" value={manualName} onChange={e => setManualName(e.target.value)} placeholder="Player Name" className="w-full bg-black/40 border border-white/10 p-4 rounded-xl outline-none" />
+                      <input type="number" value={manualAmount} onChange={e => setManualAmount(e.target.value)} placeholder="Amount" className="w-full bg-black/40 border border-white/10 p-4 rounded-xl outline-none" />
+                      <div className="grid grid-cols-2 gap-4">
+                        <button onClick={() => {
+                          const amt = parseInt(manualAmount);
+                          if (!manualName || isNaN(amt)) return alert("Enter valid name and amount");
+                          adminAction(manualName, 'add', amt);
+                        }} className="bg-green-600 p-4 rounded-xl font-black uppercase">Add Chips</button>
+                        <button onClick={() => {
+                          const amt = parseInt(manualAmount);
+                          if (!manualName || isNaN(amt)) return alert("Enter valid name and amount");
+                          adminAction(manualName, 'set', amt);
+                        }} className="bg-blue-600 p-4 rounded-xl font-black uppercase">Set Chips</button>
+                      </div>
+                      <button onClick={() => { if(confirm("Reset ALL players?")) adminAction(null, 'resetAll'); }} className="w-full bg-red-600/20 border border-red-500/50 p-4 rounded-xl font-black uppercase text-red-500">Reset All Players</button>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {showSpinWheel && (
+            <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => !isSpinning && setShowSpinWheel(false)} className="absolute inset-0 bg-black/90 backdrop-blur-md" />
+              <motion.div 
+                initial={{ scale: 0.9, opacity: 0, y: 20 }} 
+                animate={{ scale: 1, opacity: 1, y: 0 }} 
+                exit={{ scale: 0.9, opacity: 0, y: 20 }} 
+                className="relative w-full max-w-lg bg-[#0a0a0a] border border-yellow-500/20 rounded-[3rem] overflow-hidden shadow-[0_0_100px_rgba(234,179,8,0.2)] p-8 flex flex-col items-center"
+              >
+                <div className="absolute top-6 right-6">
+                  <button onClick={() => !isSpinning && setShowSpinWheel(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                    <LogOut className="w-6 h-6 text-white/40" />
+                  </button>
+                </div>
+
+                <div className="text-yellow-500 text-[10px] font-black uppercase tracking-[0.5em] mb-2">Daily Reward</div>
+                <h2 className="text-3xl font-black text-white mb-8 tracking-tighter">LUCIFER <span className="text-yellow-500">SPIN</span></h2>
+
+                <div className="relative w-64 h-64 md:w-80 md:h-80 mb-8">
+                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 z-20 w-8 h-8 bg-white rounded-full shadow-2xl flex items-center justify-center">
+                    <div className="w-0 h-0 border-l-[10px] border-l-transparent border-r-[10px] border-r-transparent border-t-[20px] border-t-red-600" />
+                  </div>
+
+                  <motion.div 
+                    animate={isSpinning ? { rotate: 360 * 10 } : { rotate: 0 }}
+                    transition={isSpinning ? { duration: 5, ease: "easeInOut" } : { duration: 0 }}
+                    className="w-full h-full rounded-full border-8 border-yellow-500/30 relative overflow-hidden shadow-[0_0_50px_rgba(234,179,8,0.3)] bg-zinc-900"
+                  >
+                    {[
+                      { prize: '10k', color: 'bg-red-600' },
+                      { prize: '20k', color: 'bg-zinc-800' },
+                      { prize: '30k', color: 'bg-red-700' },
+                      { prize: '50k', color: 'bg-zinc-900' },
+                      { prize: '1lac', color: 'bg-yellow-600' }
+                    ].map((item, i) => (
+                      <div 
+                        key={i}
+                        className={`absolute top-0 left-1/2 -translate-x-1/2 w-full h-1/2 origin-bottom flex flex-col items-center pt-4 ${item.color}`}
+                        style={{ 
+                          transform: `translateX(-50%) rotate(${i * (360/5)}deg)`,
+                          clipPath: 'polygon(50% 100%, 0 0, 100% 0)'
+                        }}
+                      >
+                        <span className="text-white font-black text-xs md:text-lg tracking-tighter mt-4 drop-shadow-lg">
+                          {item.prize}
+                        </span>
+                      </div>
+                    ))}
+                    
+                    <div className="absolute inset-0 m-auto w-12 h-12 bg-black border-4 border-yellow-500 rounded-full z-10 flex items-center justify-center">
+                      <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                    </div>
+                  </motion.div>
+                </div>
+
+                {spinResult ? (
+                  <motion.div initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center">
+                    <div className="text-yellow-500 font-black text-4xl mb-2">CONGRATS!</div>
+                    <div className="text-white font-black text-2xl uppercase tracking-widest">You Won {spinResult}</div>
+                  </motion.div>
+                ) : (
+                  <button 
+                    onClick={handleSpin}
+                    disabled={isSpinning}
+                    className={`w-full py-6 rounded-2xl font-black text-2xl transition-all active:scale-95 shadow-2xl border-b-4 ${isSpinning ? 'bg-zinc-800 text-white/20 border-zinc-900' : 'bg-yellow-600 text-black border-yellow-800 hover:bg-yellow-500'}`}
+                  >
+                    {isSpinning ? 'SPINNING...' : 'SPIN NOW'}
+                  </button>
+                )}
+
+                <p className="mt-6 text-white/30 text-[10px] font-bold uppercase tracking-widest">Available once every 24 hours</p>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </div>
     );
   }
@@ -1058,9 +1228,9 @@ export default function App() {
               <div className="absolute top-[50%] left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center z-30 w-full">
                 {!gameState?.gameStarted && !gameState?.winner && (
                   <div className="flex flex-col items-center gap-6 mb-8">
-                    {(gameState?.players.length || 0) < 3 ? (
+                    {(gameState?.players.length || 0) < 2 ? (
                       <div className="bg-black/80 backdrop-blur-xl px-8 py-4 rounded-3xl border border-white/10 text-white/40 font-black uppercase tracking-widest text-xs animate-pulse shadow-2xl">
-                        Waiting for players ({(gameState?.players.length || 0)}/3)
+                        Waiting for players ({(gameState?.players.length || 0)}/2)
                       </div>
                     ) : (
                       <button 
