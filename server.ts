@@ -268,6 +268,16 @@ async function startServer() {
   const rooms: any = {};
   const turnTimers: any = {};
 
+  const ROOM_TYPES = {
+    PLAY_NOW: 'PLAY_NOW',
+    NO_LIMIT: 'NO_LIMIT',
+    PRIVATE: 'PRIVATE'
+  };
+
+  const CHIP_LIMITS = {
+    PLAY_NOW: 5000000 // 50 Lac
+  };
+
   const RANK_VALUE: Record<Rank, number> = {
     '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14
   };
@@ -535,28 +545,45 @@ async function startServer() {
       });
     });
 
-    socket.on("joinRoom", async ({ roomId, name, password }) => {
+    socket.on("joinRoom", async ({ roomId, name, password, roomType }) => {
       let rid = (roomId || "table-1").trim().toLowerCase();
-      console.log(`${name} joining room: ${rid}`);
-      if (!rooms[rid]) {
-        rooms[rid] = { 
-          players: [
-            { id: "bot1", name: "😈 Lucifer Bot", chips: 50000, hand: [], isFolded: false, isBlind: true, currentBet: 0, isBot: true }
-          ], 
-          pot: 0, currentTurn: 0, lastBet: 1000, gameStarted: false, winner: null, deck: [], roundCount: 0 
-        };
-      }
-      const game = rooms[rid];
-      const playerName = (name || "Player").trim();
+      const type = roomType || ROOM_TYPES.PLAY_NOW;
       
-      // Check if player already in room
-      const existingPlayerIndex = game.players.findIndex((p: any) => p.name === playerName);
+      console.log(`${name} joining room: ${rid} of type: ${type}`);
+      
+      const playerName = (name || "Player").trim();
       const dbData = await getPlayerChips(playerName, password);
 
       if (dbData.error) {
         socket.emit("error", dbData.error);
         return;
       }
+
+      // Check chip limit for PLAY_NOW
+      if (type === ROOM_TYPES.PLAY_NOW && dbData.chips > CHIP_LIMITS.PLAY_NOW) {
+        socket.emit("error", "You have more than 50 Lac chips. Please join a No Limit Table!");
+        return;
+      }
+
+      if (!rooms[rid]) {
+        rooms[rid] = { 
+          players: [
+            { id: "bot1", name: "😈 Lucifer Bot", chips: 50000, hand: [], isFolded: false, isBlind: true, currentBet: 0, isBot: true }
+          ], 
+          pot: 0, 
+          currentTurn: 0, 
+          lastBet: 1000, 
+          gameStarted: false, 
+          winner: null, 
+          deck: [], 
+          roundCount: 0,
+          type: type
+        };
+      }
+      const game = rooms[rid];
+      
+      // Check if player already in room
+      const existingPlayerIndex = game.players.findIndex((p: any) => p.name === playerName);
       
       // Remove player from any other room they might be in to prevent ghosts
       Object.keys(rooms).forEach(otherRid => {
@@ -641,6 +668,12 @@ async function startServer() {
           game.pot += bet;
         }
       } else if (action === "raise") {
+        // Check if raise is allowed in this room type
+        if (game.type === ROOM_TYPES.PLAY_NOW) {
+          socket.emit("error", "Custom raises are not allowed in Play Now tables. Only double chaal is permitted.");
+          return;
+        }
+
         const raiseAmount = parseInt(amount) || 100000;
         const newLastBet = game.lastBet + raiseAmount;
         const bet = player.isBlind ? newLastBet : newLastBet * 2;
