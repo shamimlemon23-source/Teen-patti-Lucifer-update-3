@@ -23,7 +23,8 @@ import {
   Volume2,
   VolumeX,
   Music,
-  CreditCard
+  CreditCard,
+  Camera
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { soundService } from './services/soundService.js';
@@ -146,6 +147,7 @@ export default function App() {
   const [joined, setJoined] = useState(false);
   const [view, setView] = useState<'splash' | 'login' | 'lobby' | 'game'>('splash');
   const [isConnected, setIsConnected] = useState(false);
+  const [profilePic, setProfilePic] = useState<string | null>(null);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [adminTab, setAdminTab] = useState<'players' | 'manual'>('players');
   const [manualName, setManualName] = useState('');
@@ -190,35 +192,136 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (socket) {
-      socket.on('spinResult', (data: { prize: string, chips: number, lastSpin: number }) => {
+    if (!gameState || view !== 'game') return;
+
+    const oldWinner = prevGameState.current?.winner;
+    const oldGameStarted = prevGameState.current?.gameStarted;
+
+    if (gameState.winner && !oldWinner) {
+      const myPlayer = gameState.players.find(p => p.id === socket?.id);
+      if (gameState.winner === myPlayer?.name) {
         soundService.play('win');
-        // Small delay to let the animation feel better before showing result
-        setTimeout(() => {
-          setIsSpinning(false);
-          setSpinResult(data.prize);
-          setLastSpinTime(data.lastSpin);
-          setLobbyChips(data.chips);
-          confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 } });
-          setTimeout(() => setSpinResult(null), 5000);
-        }, 500);
-      });
-
-      socket.on('spinError', (data: { message: string }) => {
-        setIsSpinning(false);
-        alert(data.message);
-      });
-
-      socket.on('gameNotification', (data: { message: string }) => {
-        setGameNotification(data.message);
-        setTimeout(() => setGameNotification(null), 4000);
-      });
-
-      socket.on('sideShowPrompt', (data: { fromId: string, fromName: string }) => {
-        setSideShowPrompt(data);
-      });
+        confetti({ particleCount: 150, spread: 70 });
+      } else {
+        soundService.play('lose');
+      }
     }
+
+    if (gameState.gameStarted && !oldGameStarted) {
+      soundService.play('shuffle');
+    }
+
+    prevGameState.current = gameState;
+  }, [gameState, view, socket]);
+
+  const prevGameState = React.useRef<GameState | null>(null);
+
+  useEffect(() => {
+    if (!socket) return;
+
+    socket.on('loginSuccess', (data: { name: string, chips: number, last_spin: number, profilePic?: string }) => {
+      setName(data.name);
+      setLobbyChips(data.chips);
+      setLastSpinTime(data.last_spin);
+      if (data.profilePic) setProfilePic(data.profilePic);
+      setView('lobby');
+      localStorage.setItem('lucifer_poker_name', data.name);
+    });
+
+    socket.on('chipsUpdated', (newChips: number) => {
+      setLobbyChips(newChips);
+    });
+
+    socket.on('profilePicUpdated', (url: string) => {
+      setProfilePic(url);
+    });
+
+    socket.on('gameState', (state: GameState) => {
+      setGameState(state);
+    });
+
+    socket.on('gameNotification', (data: { message: string }) => {
+      setGameNotification(data.message);
+      setTimeout(() => setGameNotification(null), 4000);
+    });
+
+    socket.on('adminStats', (stats: any[]) => setAdminStats(stats));
+    socket.on('adminMessage', (msg: string) => {
+      setAdminMessage(msg);
+      setTimeout(() => setAdminMessage(''), 3000);
+    });
+
+    socket.on('error', (msg: string) => {
+      alert(msg);
+      if (msg.includes("chips")) {
+        setJoined(false);
+        setView('lobby');
+      } else {
+        setJoined(false);
+        setView('login');
+      }
+    });
+
+    socket.on('sideShowPrompt', (data: { fromId: string, fromName: string }) => {
+      setSideShowPrompt(data);
+    });
+
+    socket.on('spinResult', (data: { prize: string, chips: number, lastSpin: number }) => {
+      soundService.play('win');
+      setIsSpinning(false);
+      setSpinResult(data.prize);
+      setLastSpinTime(data.lastSpin);
+      setLobbyChips(data.chips);
+      confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 } });
+      setTimeout(() => setSpinResult(null), 5000);
+    });
+
+    socket.on('spinError', (data: { message: string }) => {
+      setIsSpinning(false);
+      alert(data.message);
+    });
+
+    return () => {
+      socket.off('loginSuccess');
+      socket.off('chipsUpdated');
+      socket.off('profilePicUpdated');
+      socket.off('gameState');
+      socket.off('gameNotification');
+      socket.off('adminStats');
+      socket.off('adminMessage');
+      socket.off('error');
+      socket.off('sideShowPrompt');
+      socket.off('spinResult');
+      socket.off('spinError');
+    };
   }, [socket]);
+
+  useEffect(() => {
+    const newSocket = io({
+      transports: ['polling', 'websocket'],
+      reconnectionAttempts: 100,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 60000,
+      autoConnect: true,
+      randomizationFactor: 0.5
+    });
+    setSocket(newSocket);
+
+    newSocket.on('connect', () => {
+      setIsConnected(true);
+    });
+    
+    newSocket.on('connect_error', (err) => {
+      setIsConnected(false);
+    });
+
+    newSocket.on('disconnect', () => {
+      setIsConnected(false);
+    });
+
+    return () => { newSocket.close(); };
+  }, []);
 
   useEffect(() => {
     if (gameState?.turnStartTime && gameState?.turnDuration) {
@@ -234,7 +337,7 @@ export default function App() {
   }, [gameState?.turnStartTime, gameState?.turnDuration, gameState?.currentTurn]);
 
   useEffect(() => {
-    const timer = setTimeout(() => setView('login'), 3000);
+    const timer = setTimeout(() => setShowSplash(false), 3000);
     return () => clearTimeout(timer);
   }, []);
 
@@ -255,88 +358,6 @@ export default function App() {
     };
   }, []);
 
-  useEffect(() => {
-    const newSocket = io({
-      transports: ['polling', 'websocket'],
-      reconnectionAttempts: 100,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      timeout: 60000,
-      autoConnect: true,
-      randomizationFactor: 0.5
-    });
-    setSocket(newSocket);
-
-    newSocket.on('connect', () => {
-      setIsConnected(true);
-      if (name) {
-        // Include password on reconnection to avoid being kicked out
-        newSocket.emit('joinRoom', { roomId, name, password });
-      }
-    });
-    
-    newSocket.on('connect_error', (err) => {
-      setIsConnected(false);
-    });
-
-    newSocket.on('disconnect', () => {
-      setIsConnected(false);
-    });
-
-    newSocket.on('gameState', (state: GameState) => {
-      const oldWinner = gameState?.winner;
-      const oldGameStarted = gameState?.gameStarted;
-      
-      setGameState(state);
-      
-      if (state.winner && !oldWinner) {
-        const myPlayer = state.players.find(p => p.id === newSocket.id);
-        if (state.winner === myPlayer?.name) {
-          soundService.play('win');
-          confetti({ particleCount: 150, spread: 70 });
-        } else {
-          soundService.play('lose');
-        }
-      }
-
-      if (state.gameStarted && !oldGameStarted) {
-        soundService.play('shuffle');
-      }
-    });
-
-    newSocket.on('adminStats', (stats: any[]) => setAdminStats(stats));
-    newSocket.on('adminMessage', (msg: string) => {
-      setAdminMessage(msg);
-      setTimeout(() => setAdminMessage(''), 3000);
-    });
-
-    newSocket.on('error', (msg: string) => {
-      alert(msg);
-      // If it's a chip limit error, we should stay in lobby
-      if (msg.includes("chips")) {
-        setJoined(false);
-        setView('lobby');
-      } else {
-        setJoined(false);
-        setView('login');
-      }
-    });
-
-    newSocket.on('sideShowPrompt', (data: { fromName: string }) => {
-      setSideShowPrompt(data);
-    });
-
-    return () => { newSocket.close(); };
-  }, []);
-
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  }, []);
-
   const joinRoom = (type?: string, tableId?: string) => { 
     if (socket && name) { 
       soundService.play('click');
@@ -355,24 +376,12 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (!socket) return;
-
-    socket.on('loginSuccess', (data: { name: string, chips: number, last_spin: number }) => {
-      setName(data.name);
-      setLobbyChips(data.chips);
-      setView('lobby');
-      localStorage.setItem('lucifer_poker_name', data.name);
-    });
-
-    socket.on('chipsUpdated', (newChips: number) => {
-      setLobbyChips(newChips);
-    });
-
-    return () => {
-      socket.off('loginSuccess');
-      socket.off('chipsUpdated');
-    };
-  }, [socket]);
+    if (view !== 'game' && joined && socket && roomId) {
+      socket.emit('leaveRoom', roomId);
+      setJoined(false);
+      setGameState(null);
+    }
+  }, [view, joined, socket, roomId]);
 
   const logout = () => {
     soundService.play('click');
@@ -386,6 +395,9 @@ export default function App() {
 
   const fullLogout = () => {
     soundService.play('click');
+    if (socket && roomId && joined) {
+      socket.emit('leaveRoom', roomId);
+    }
     setName('');
     setJoined(false);
     setView('login');
@@ -395,6 +407,23 @@ export default function App() {
   const startGame = () => {
     soundService.play('click');
     socket?.emit('startGame', roomId);
+  };
+  
+  const handleProfilePicUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 500 * 1024) {
+      alert("Image too large! Please choose an image under 500KB.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64 = reader.result as string;
+      socket?.emit('updateProfilePic', { name, profilePic: base64 });
+    };
+    reader.readAsDataURL(file);
   };
   
   const takeAction = (action: string, amount?: number) => {
@@ -478,17 +507,23 @@ export default function App() {
     if (isSpinning) return;
     soundService.play('click');
     setIsSpinning(true);
-    // Add a timeout to prevent permanent hang if server doesn't respond
+    
     const timeout = setTimeout(() => {
-      if (isSpinning) {
-        setIsSpinning(false);
-        alert("Spin timed out. Please try again.");
-      }
+      setIsSpinning(prev => {
+        if (prev) {
+          alert("Spin timed out. Please try again.");
+          return false;
+        }
+        return prev;
+      });
     }, 10000);
+
     socket?.emit('spinWheel', { name });
     
-    // Clear timeout if result received (handled in useEffect where spinResult is received)
-    // Actually, I'll just rely on the socket listener to set isSpinning(false)
+    // Clear timeout if result comes back
+    const resultHandler = () => clearTimeout(timeout);
+    socket?.once('spinResult', resultHandler);
+    socket?.once('spinError', resultHandler);
   };
 
   const rotatedPlayers = useMemo(() => {
@@ -650,8 +685,19 @@ export default function App() {
         {/* Header */}
         <header className="relative z-50 p-4 flex items-center justify-between">
           <div className="flex items-center gap-3 bg-zinc-900/80 backdrop-blur-xl p-2 pr-6 rounded-2xl border border-white/10 shadow-2xl">
-            <div className="w-12 h-12 bg-gradient-to-br from-red-600 to-red-900 rounded-xl border border-red-500/30 flex items-center justify-center shadow-lg overflow-hidden">
-               <User className="w-7 h-7 text-white/50" />
+            <div className="relative group">
+              <div className="w-12 h-12 bg-gradient-to-br from-red-600 to-red-900 rounded-xl border border-red-500/30 flex items-center justify-center shadow-lg overflow-hidden">
+                {profilePic ? (
+                  <img src={profilePic} alt="Profile" className="w-full h-full object-cover" />
+                ) : (
+                  <User className="w-7 h-7 text-white/50" />
+                )}
+                <label className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer transition-opacity">
+                  <Camera className="w-4 h-4 text-white" />
+                  <input type="file" accept="image/*" className="hidden" onChange={handleProfilePicUpload} />
+                </label>
+              </div>
+              <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-emerald-500 border-2 border-[#0a0a0a] rounded-full" />
             </div>
             <div className="flex flex-col">
               <span className="text-sm font-black text-white uppercase tracking-tight">{name}</span>
@@ -1100,7 +1146,11 @@ export default function App() {
 
                     <div className={`relative flex flex-col items-center ${player.isFolded ? 'opacity-30 grayscale' : ''} scale-[0.65] md:scale-[1.1]`}>
                       <div className={`w-12 h-12 md:w-20 md:h-20 rounded-2xl md:rounded-3xl border-2 flex items-center justify-center transition-all duration-500 relative ${isCurrent ? 'border-red-500 shadow-[0_0_40px_rgba(220,38,38,0.8)] scale-110 bg-red-500/20' : 'border-white/10 bg-black/80'}`}>
-                        <User className={`w-6 h-6 md:w-12 md:h-12 ${isCurrent ? 'text-red-500' : 'text-white/20'}`} />
+                        {player.profilePic ? (
+                          <img src={player.profilePic} alt={player.name} className="w-full h-full object-cover rounded-2xl md:rounded-3xl" />
+                        ) : (
+                          <User className={`w-6 h-6 md:w-12 md:h-12 ${isCurrent ? 'text-red-500' : 'text-white/20'}`} />
+                        )}
                         {isMe && (
                           <div className="absolute -top-3 -right-3 bg-yellow-500 text-black text-[8px] md:text-[10px] font-black px-2 py-1 rounded-lg shadow-xl z-10 uppercase tracking-tighter">You</div>
                         )}
@@ -1297,7 +1347,10 @@ export default function App() {
                           <div key={stat.name || i} className="flex items-center justify-between p-2 md:p-4 bg-white/5 border border-white/5 rounded-xl md:rounded-2xl">
                             <div className="flex items-center gap-2 md:gap-3"><span className="text-xs md:text-base font-bold">{stat.name}</span></div>
                             <div className="flex items-center gap-2 md:gap-4">
-                              <div className="flex items-center gap-1 md:gap-2 text-yellow-500 font-black text-[10px] md:text-base"><Coins className="w-3 h-3 md:w-4 md:h-4" />{Number(stat.chips).toLocaleString()} $(USD)</div>
+                              <div className="flex items-center gap-1 md:gap-2 text-yellow-500 font-black text-[10px] md:text-base">
+                                <Coins className="w-3 h-3 md:w-4 md:h-4" />
+                                {isFinite(Number(stat.chips)) ? Number(stat.chips).toLocaleString() : '0'} $(USD)
+                              </div>
                               <button onClick={() => handleAdminAdd(stat.name)} className="p-1.5 md:p-2 bg-green-600/10 hover:bg-green-600/20 border border-green-500/20 rounded-lg text-green-500 text-[8px] md:text-[10px] font-black uppercase">Add</button>
                               <button onClick={() => handleAdminSet(stat.name)} className="p-1.5 md:p-2 bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/20 rounded-lg text-blue-500 text-[8px] md:text-[10px] font-black uppercase">Set</button>
                               <button onClick={() => adminAction(stat.name, 'reset')} className="p-1.5 md:p-2 bg-red-600/10 hover:bg-red-600/20 border border-red-500/20 rounded-lg text-red-500 text-[8px] md:text-[10px] font-black uppercase">Reset</button>
