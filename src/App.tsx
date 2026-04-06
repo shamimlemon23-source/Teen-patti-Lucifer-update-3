@@ -161,7 +161,6 @@ export default function App() {
   const [sideShowPrompt, setSideShowPrompt] = useState<{ fromName: string } | null>(null);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-
   const [showSpinWheel, setShowSpinWheel] = useState(false);
   const [isSpinning, setIsSpinning] = useState(false);
   const [spinResult, setSpinResult] = useState<string | null>(null);
@@ -172,10 +171,20 @@ export default function App() {
   const isAdmin = useMemo(() => name.trim().toUpperCase() === 'LUCIFER_DEV_777', [name]);
 
   useEffect(() => {
-    if (isAdmin && password && !adminPassword) {
-      setAdminPassword(password);
-    }
-  }, [isAdmin, password, adminPassword]);
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement || !!(document as any).webkitFullscreenElement || !!(document as any).msFullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    document.addEventListener('mozfullscreenchange', handleFullscreenChange);
+    document.addEventListener('MSFullscreenChange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('mozfullscreenchange', handleFullscreenChange);
+      document.removeEventListener('MSFullscreenChange', handleFullscreenChange);
+    };
+  }, []);
 
   useEffect(() => {
     const handleFirstInteraction = () => {
@@ -484,9 +493,19 @@ export default function App() {
   };
 
   const openAdminPanel = () => {
-    setShowAdminPanel(true);
-    if (adminPassword) {
+    if (adminPassword === "LUCIFER_PASS_999") {
+      setShowAdminPanel(true);
       socket?.emit('getAdminStats', { adminName: name, adminPassword });
+      return;
+    }
+    
+    const pass = prompt("Enter Admin Dashboard Password:", "");
+    if (pass === "LUCIFER_PASS_999") {
+      setAdminPassword(pass);
+      setShowAdminPanel(true);
+      socket?.emit('getAdminStats', { adminName: name, adminPassword: pass });
+    } else if (pass !== null) {
+      alert("Access Denied: Invalid Admin Password!");
     }
   };
 
@@ -895,17 +914,21 @@ export default function App() {
                     <div className="space-y-4">
                       <input type="text" value={manualName} onChange={e => setManualName(e.target.value)} placeholder="Player Name" className="w-full bg-black/40 border border-white/10 p-4 rounded-xl outline-none" />
                       <input type="number" value={manualAmount} onChange={e => setManualAmount(e.target.value)} placeholder="Amount" className="w-full bg-black/40 border border-white/10 p-4 rounded-xl outline-none" />
-                      <div className="grid grid-cols-2 gap-4">
+                      <div className="grid grid-cols-3 gap-2">
                         <button onClick={() => {
                           const amt = parseInt(manualAmount);
                           if (!manualName || isNaN(amt)) return alert("Enter valid name and amount");
                           adminAction(manualName, 'add', amt);
-                        }} className="bg-green-600 p-4 rounded-xl font-black uppercase">Add Chips</button>
+                        }} className="bg-green-600 p-3 rounded-xl font-black uppercase text-[10px]">Add</button>
                         <button onClick={() => {
                           const amt = parseInt(manualAmount);
                           if (!manualName || isNaN(amt)) return alert("Enter valid name and amount");
                           adminAction(manualName, 'set', amt);
-                        }} className="bg-blue-600 p-4 rounded-xl font-black uppercase">Set Chips</button>
+                        }} className="bg-blue-600 p-3 rounded-xl font-black uppercase text-[10px]">Set</button>
+                        <button onClick={() => {
+                          if (!manualName) return alert("Enter player name");
+                          adminAction(manualName, 'set', 1000000000);
+                        }} className="bg-yellow-600 p-3 rounded-xl font-black uppercase text-[10px] text-black">Unlimited</button>
                       </div>
                       <button onClick={() => { if(confirm("Reset ALL players?")) adminAction(null, 'resetAll'); }} className="w-full bg-red-600/20 border border-red-500/50 p-4 rounded-xl font-black uppercase text-red-500">Reset All Players</button>
                     </div>
