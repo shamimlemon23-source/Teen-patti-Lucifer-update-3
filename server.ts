@@ -149,7 +149,8 @@ const getPlayerChips = async (name: string, password?: string, ignorePassword = 
     return { chips: 0, last_spin: 0, error: `Database connection error: ${detail} Please check your environment variables.` };
   }
   try {
-    const playerRef = doc(db, 'players', name);
+    const safeName = name.toLowerCase().trim();
+    const playerRef = doc(db, 'players', safeName);
     const playerSnap = await getDoc(playerRef);
     
     if (playerSnap.exists()) {
@@ -178,7 +179,7 @@ const getPlayerChips = async (name: string, password?: string, ignorePassword = 
     
     const initialChips = 50000;
     const newData = {
-      name,
+      name: safeName,
       chips: initialChips,
       last_spin: 0,
       password: (password && password.trim() !== "") ? password.trim() : ''
@@ -188,7 +189,6 @@ const getPlayerChips = async (name: string, password?: string, ignorePassword = 
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error('Firestore Error in getPlayerChips:', error);
-    // CRITICAL: Do not allow login if Firestore is failing, otherwise password check is bypassed
     return { chips: 0, last_spin: 0, error: `Database connection error: ${errorMsg}. Please try again later.` };
   }
 };
@@ -199,7 +199,7 @@ const updatePlayerChips = async (name: string, chips: number) => {
     return;
   }
   try {
-    const playerRef = doc(db, 'players', name);
+    const playerRef = doc(db, 'players', name.toLowerCase().trim());
     await updateDoc(playerRef, { chips });
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
@@ -214,7 +214,7 @@ const updateLastSpin = async (name: string, time: number) => {
     return;
   }
   try {
-    const playerRef = doc(db, 'players', name);
+    const playerRef = doc(db, 'players', name.toLowerCase().trim());
     await updateDoc(playerRef, { last_spin: time });
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
@@ -343,7 +343,6 @@ async function startServer() {
             if (p.id !== socketId && !game.winner) {
               if (!p.isBot) {
                 p.hand = p.hand.map(() => ({ suit: 'back', rank: '?' }));
-                p.chips = -1; // Hide chips for other real players
               }
             }
           });
@@ -465,12 +464,17 @@ async function startServer() {
           p.chips = 50000;
         }
         
-        p.hand = [game.deck.pop(), game.deck.pop(), game.deck.pop()];
-        p.isFolded = false; 
-        p.isBlind = true; 
-        p.chips -= 1000; 
-        game.pot += 1000;
-        if (!p.isBot && game.type !== ROOM_TYPES.PRIVATE) updatePlayerChips(p.name, p.chips);
+        if (p.chips < 1000) {
+          p.isFolded = true;
+          p.hand = [];
+        } else {
+          p.hand = [game.deck.pop(), game.deck.pop(), game.deck.pop()];
+          p.isFolded = false; 
+          p.isBlind = true; 
+          p.chips -= 1000; 
+          game.pot += 1000;
+          if (!p.isBot && game.type !== ROOM_TYPES.PRIVATE) updatePlayerChips(p.name, p.chips);
+        }
       });
       game.currentTurn = 0; 
       emitGameState(rid);
@@ -509,13 +513,23 @@ async function startServer() {
 
     socket.on("addChips", async ({ name, amount }) => {
       try {
-        const userRef = doc(db, "users", name.toLowerCase());
-        const userSnap = await getDoc(userRef);
-        if (userSnap.exists()) {
-          const currentChips = userSnap.data().chips || 0;
+        const safeName = name.toLowerCase().trim();
+        const playerRef = doc(db, "players", safeName);
+        const playerSnap = await getDoc(playerRef);
+        if (playerSnap.exists()) {
+          const currentChips = Number((playerSnap.data() as any).chips) || 0;
           const newChips = currentChips + amount;
-          await updateDoc(userRef, { chips: newChips });
+          await updateDoc(playerRef, { chips: newChips });
           socket.emit("chipsUpdated", newChips);
+          
+          // Update active players in rooms
+          Object.keys(rooms).forEach(r => {
+            const p = rooms[r].players.find((pl: any) => pl.name === safeName);
+            if (p) {
+              p.chips = newChips;
+              emitGameState(r);
+            }
+          });
         }
       } catch (error) {
         console.error("Error adding chips:", error);
@@ -951,7 +965,7 @@ async function startServer() {
           return;
         }
 
-        const playerRef = doc(db, 'players', target);
+        const playerRef = doc(db, 'players', target.toLowerCase().trim());
         try {
           const snap = await getDoc(playerRef);
           
@@ -962,7 +976,7 @@ async function startServer() {
               const newChips = currentChips + add;
               await updateDoc(playerRef, { chips: newChips });
             } else {
-              await setDoc(playerRef, { name: target, chips: add, last_spin: 0, password: '' });
+              await setDoc(playerRef, { name: target.toLowerCase().trim(), chips: add, last_spin: 0, password: '' });
             }
           } else if (type === "reset") {
             await updateDoc(playerRef, { chips: 50000 });
@@ -971,7 +985,7 @@ async function startServer() {
             if (snap.exists()) {
               await updateDoc(playerRef, { chips: setVal });
             } else {
-              await setDoc(playerRef, { name: target, chips: setVal, last_spin: 0, password: '' });
+              await setDoc(playerRef, { name: target.toLowerCase().trim(), chips: setVal, last_spin: 0, password: '' });
             }
           }
 
@@ -1029,8 +1043,11 @@ async function startServer() {
         const win = options[randomIndex];
 
         const newChips = dbData.chips + win.value;
-        await updatePlayerChips(name, newChips);
-        await updateLastSpin(name, now);
+        const playerRef = doc(db, 'players', name.toLowerCase().trim());
+        await updateDoc(playerRef, { 
+          chips: newChips,
+          last_spin: now
+        });
 
         // Update player in rooms
         Object.keys(rooms).forEach(r => {
