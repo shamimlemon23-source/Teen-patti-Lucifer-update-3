@@ -138,7 +138,7 @@ try {
   console.error("Error during Firebase initialization:", e);
 }
 
-const getPlayerChips = async (name: string, password?: string, ignorePassword = false): Promise<{ chips: number, last_spin: number, error?: string }> => {
+const getPlayerChips = async (name: string, password?: string, ignorePassword = false): Promise<{ chips: number, last_spin: number, profilePic?: string, error?: string }> => {
   if (!db) {
     const projectId = firebaseConfig?.projectId || process.env.FIREBASE_PROJECT_ID;
     const apiKey = firebaseConfig?.apiKey || process.env.FIREBASE_API_KEY;
@@ -158,7 +158,7 @@ const getPlayerChips = async (name: string, password?: string, ignorePassword = 
       
       // If ignorePassword is true, we are doing an internal update (like spin or admin)
       if (ignorePassword) {
-        return { chips: (data.chips !== undefined) ? Number(data.chips) : 50000, last_spin: data.last_spin || 0 };
+        return { chips: (data.chips !== undefined) ? Number(data.chips) : 50000, last_spin: data.last_spin || 0, profilePic: data.profilePic };
       }
 
       // If the account HAS a password, we MUST verify it.
@@ -174,7 +174,7 @@ const getPlayerChips = async (name: string, password?: string, ignorePassword = 
         await updateDoc(playerRef, { password: password.trim() });
       }
       
-      return { chips: (data.chips !== undefined) ? Number(data.chips) : 50000, last_spin: data.last_spin || 0 };
+      return { chips: (data.chips !== undefined) ? Number(data.chips) : 50000, last_spin: data.last_spin || 0, profilePic: data.profilePic };
     }
     
     const initialChips = 50000;
@@ -504,10 +504,30 @@ async function startServer() {
           socket.emit("error", dbData.error);
           return;
         }
-        socket.emit("loginSuccess", { name, chips: dbData.chips, last_spin: dbData.last_spin });
+        socket.emit("loginSuccess", { name, chips: dbData.chips, last_spin: dbData.last_spin, profilePic: dbData.profilePic });
       } catch (error) {
         console.error("Login error:", error);
         socket.emit("error", "Login failed. Please try again.");
+      }
+    });
+
+    socket.on("updateProfilePic", async ({ name, profilePic }) => {
+      try {
+        const safeName = name.toLowerCase().trim();
+        const playerRef = doc(db, 'players', safeName);
+        await updateDoc(playerRef, { profilePic });
+        
+        // Update active players in rooms
+        Object.keys(rooms).forEach(r => {
+          const p = rooms[r].players.find((pl: any) => pl.name.toLowerCase().trim() === safeName);
+          if (p) {
+            p.profilePic = profilePic;
+            emitGameState(r);
+          }
+        });
+        socket.emit("profilePicUpdated", profilePic);
+      } catch (error) {
+        console.error("Error updating profile pic:", error);
       }
     });
 
@@ -701,6 +721,7 @@ async function startServer() {
       if (existingPlayerIndex !== -1 && !game.players[existingPlayerIndex].isBot) {
         game.players[existingPlayerIndex].id = socket.id;
         game.players[existingPlayerIndex].chips = initialChips;
+        game.players[existingPlayerIndex].profilePic = dbData.profilePic;
       } else {
         game.players.push({ 
           id: socket.id, 
@@ -711,7 +732,8 @@ async function startServer() {
           isFolded: false, 
           isBlind: true, 
           currentBet: 0, 
-          isBot: false 
+          isBot: false,
+          profilePic: dbData.profilePic
         });
       }
       
@@ -904,9 +926,10 @@ async function startServer() {
         const q = query(collection(db, 'players'), orderBy('chips', 'desc'), limit(100));
         const querySnapshot = await getDocs(q);
         const stats: any[] = [];
-        querySnapshot.forEach((d: any) => {
-          stats.push({ name: d.id, chips: d.data().chips });
-        });
+    querySnapshot.forEach((d: any) => {
+      const chips = Number(d.data().chips);
+      stats.push({ name: d.id, chips: isFinite(chips) ? chips : 0 });
+    });
         socket.emit("adminStats", stats);
       } catch (error) {
         console.error('Admin Stats Error:', error);
@@ -945,9 +968,15 @@ async function startServer() {
             Object.keys(rooms).forEach(r => {
               rooms[r].players.forEach((p: any) => {
                 p.chips = 50000;
+                const targetSocket = io.sockets.sockets.get(p.id);
+                if (targetSocket) targetSocket.emit("chipsUpdated", 50000);
               });
               emitGameState(r);
             });
+            // Also check all sockets for connected players not in rooms
+            for (const [id, s] of io.sockets.sockets) {
+              s.emit("chipsUpdated", 50000);
+            }
             await refreshAdminStats();
             socket.emit("adminMessage", "All players reset to 50K");
           } catch (error) {
@@ -993,13 +1022,23 @@ async function startServer() {
           const updatedSnap = await getDoc(playerRef);
           if (updatedSnap.exists()) {
             const updatedChips = Number((updatedSnap.data() as any).chips);
+            const safeTarget = target.toLowerCase().trim();
             Object.keys(rooms).forEach(r => {
-              const p = rooms[r].players.find((pl: any) => pl.name === target);
+              const p = rooms[r].players.find((pl: any) => pl.name.toLowerCase().trim() === safeTarget);
               if (p) {
                 p.chips = updatedChips;
                 emitGameState(r);
+                const targetSocket = io.sockets.sockets.get(p.id);
+                if (targetSocket) targetSocket.emit("chipsUpdated", updatedChips);
               }
             });
+
+            // Also check all sockets for this player name (if not in a room)
+            for (const [id, s] of io.sockets.sockets) {
+              if ((s as any).playerName?.toLowerCase().trim() === safeTarget) {
+                s.emit("chipsUpdated", updatedChips);
+              }
+            }
           }
           
           await refreshAdminStats();
@@ -1050,8 +1089,9 @@ async function startServer() {
         });
 
         // Update player in rooms
+        const safeName = name.toLowerCase().trim();
         Object.keys(rooms).forEach(r => {
-          const p = rooms[r].players.find((pl: any) => pl.name === name);
+          const p = rooms[r].players.find((pl: any) => pl.name.toLowerCase().trim() === safeName);
           if (p) {
             p.chips = newChips;
             emitGameState(r);
@@ -1060,7 +1100,7 @@ async function startServer() {
 
         socket.emit("spinResult", { 
           prize: win.label, 
-          chips: win.value, 
+          chips: newChips, 
           lastSpin: now 
         });
       } catch (error) {
