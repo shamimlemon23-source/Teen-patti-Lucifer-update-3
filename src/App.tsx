@@ -22,7 +22,8 @@ import {
   Disc,
   Volume2,
   VolumeX,
-  Music
+  Music,
+  CreditCard
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { soundService } from './services/soundService.js';
@@ -62,6 +63,7 @@ interface GameState {
   gameStarted: boolean;
   winner: string | null;
   roundCount: number;
+  type?: string;
   turnStartTime?: number;
   turnDuration?: number;
 }
@@ -142,6 +144,7 @@ export default function App() {
   const [password, setPassword] = useState('');
   const [roomId, setRoomId] = useState('table-1');
   const [joined, setJoined] = useState(false);
+  const [view, setView] = useState<'splash' | 'login' | 'lobby' | 'game'>('splash');
   const [isConnected, setIsConnected] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [adminTab, setAdminTab] = useState<'players' | 'manual'>('players');
@@ -229,7 +232,7 @@ export default function App() {
   }, [gameState?.turnStartTime, gameState?.turnDuration, gameState?.currentTurn]);
 
   useEffect(() => {
-    const timer = setTimeout(() => setShowSplash(false), 3000);
+    const timer = setTimeout(() => setView('login'), 3000);
     return () => clearTimeout(timer);
   }, []);
 
@@ -307,7 +310,14 @@ export default function App() {
 
     newSocket.on('error', (msg: string) => {
       alert(msg);
-      setJoined(false);
+      // If it's a chip limit error, we should stay in lobby
+      if (msg.includes("chips")) {
+        setJoined(false);
+        setView('lobby');
+      } else {
+        setJoined(false);
+        setView('login');
+      }
     });
 
     newSocket.on('sideShowPrompt', (data: { fromName: string }) => {
@@ -325,13 +335,30 @@ export default function App() {
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, []);
 
-  const joinRoom = () => { 
+  const joinRoom = (type?: string, tableId?: string) => { 
     if (socket && name) { 
       soundService.play('click');
-      soundService.init(); // Unlock audio on first interaction
-      socket.emit('joinRoom', { roomId, name, password }); 
+      soundService.init(); 
+      const rid = tableId || roomId;
+      socket.emit('joinRoom', { roomId: rid, name, password, roomType: type }); 
       setJoined(true); 
+      setView('game');
     } 
+  };
+
+  const login = async () => {
+    if (!name) return;
+    soundService.play('click');
+    // We don't actually join a room here, just set the name and move to lobby
+    // The server will verify the password when we actually join a room
+    setView('lobby');
+  };
+
+  const logout = () => {
+    soundService.play('click');
+    setJoined(false);
+    setView('login');
+    setGameState(null);
   };
   const startGame = () => {
     soundService.play('click');
@@ -474,7 +501,7 @@ export default function App() {
     setSoundSettings(soundService.getSettings());
   };
 
-  if (showSplash) {
+  if (view === 'splash') {
     return (
       <div className="h-screen bg-black flex flex-col items-center justify-center p-4 relative overflow-hidden">
         <div className="absolute inset-0 z-0 opacity-40">
@@ -493,11 +520,192 @@ export default function App() {
           initial={{ y: 20, opacity: 0 }} 
           animate={{ y: 0, opacity: 1 }} 
           transition={{ delay: 0.5 }} 
-          className="relative z-10 mt-4 text-3xl md:text-5xl font-poker text-emerald-500 tracking-normal text-center uppercase drop-shadow-[0_0_20px_rgba(16,185,129,0.4)]"
+          className="relative z-10 mt-4 text-3xl md:text-5xl font-poker text-emerald-500 tracking-tighter text-center uppercase drop-shadow-[0_0_15px_rgba(16,185,129,0.6)]"
         >
           TEEN PATTI LUCIFER
         </motion.h1>
         <div className="relative z-10 mt-4 text-white/40 font-bold uppercase tracking-[0.5em] text-[10px]">Loading Underworld...</div>
+      </div>
+    );
+  }
+
+  if (view === 'login') {
+    return (
+      <div className="fixed inset-0 bg-[#050505] text-white font-sans overflow-hidden flex flex-col select-none touch-none">
+        <div className="absolute inset-0 z-0 pointer-events-none">
+          <img src={ASSETS.TABLE_BG} alt="Background" className="w-full h-full object-cover opacity-20" referrerPolicy="no-referrer" />
+          <div className="absolute inset-0 bg-gradient-to-b from-black via-transparent to-black" />
+        </div>
+
+        <div className="relative z-10 flex-1 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-black/60 backdrop-blur-3xl p-8 rounded-[2.5rem] border border-white/10 shadow-2xl text-center relative overflow-hidden">
+            <div className="absolute -top-24 -left-24 w-48 h-48 bg-red-600/20 blur-[100px]" />
+            <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-red-600/20 blur-[100px]" />
+            
+            <div className="relative z-10">
+              <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="w-32 h-32 mx-auto mb-4">
+                <img src={ASSETS.DEALER} alt="Dealer" className="w-full h-full object-contain drop-shadow-2xl" referrerPolicy="no-referrer" />
+              </motion.div>
+
+              <div className="text-red-600 text-[10px] font-bold uppercase tracking-[0.3em] mb-4">ULTRA UPDATE v3.0</div>
+              <h1 className="font-poker text-3xl md:text-5xl mb-1 tracking-tighter uppercase text-emerald-500 drop-shadow-[0_0_15px_rgba(16,185,129,0.6)]">
+                TEEN PATTI LUCIFER
+              </h1>
+              <p className="text-white/40 text-sm mb-8 font-bold">50K Chips & Lucifer Bots Active!</p>
+              
+              <div className="space-y-4">
+                <div className="relative">
+                  <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/20" />
+                  <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Your Name" className="w-full bg-white/5 p-4 pl-12 rounded-2xl border border-white/10 outline-none focus:border-red-600 transition-all font-bold" />
+                </div>
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/20" />
+                  <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Set/Enter Password" className="w-full bg-white/5 p-4 pl-12 rounded-2xl border border-white/10 outline-none focus:border-red-600 transition-all font-bold" />
+                </div>
+                <button onClick={login} disabled={!name} className="w-full bg-red-600 p-5 rounded-2xl font-black text-xl hover:bg-red-500 transition-all active:scale-95 text-white shadow-[0_0_40px_rgba(220,38,38,0.4)] border-b-4 border-red-800">
+                  ENTER UNDERWORLD
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (view === 'lobby') {
+    return (
+      <div className="fixed inset-0 bg-[#050505] text-white font-sans overflow-hidden flex flex-col select-none touch-none">
+        <div className="absolute inset-0 z-0 pointer-events-none">
+          <img src={ASSETS.TABLE_BG} alt="Background" className="w-full h-full object-cover opacity-20" referrerPolicy="no-referrer" />
+          <div className="absolute inset-0 bg-gradient-to-b from-black via-transparent to-black" />
+        </div>
+
+        {/* Top Bar */}
+        <header className="relative z-50 p-4 flex items-center justify-between bg-black/40 backdrop-blur-2xl border-b border-white/5">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-zinc-900 rounded-2xl border border-white/10 flex items-center justify-center overflow-hidden">
+              <User className="w-6 h-6 text-white/20" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-sm font-black uppercase tracking-widest text-emerald-500">{name}</span>
+              <div className="flex items-center gap-2">
+                <Coins className="w-3 h-3 text-yellow-500" />
+                <span className="text-xs font-bold text-white/60">{(currentPlayer?.chips || 50000).toLocaleString()} Chips</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <button onClick={toggleFullscreen} className="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-colors border border-white/10">
+              {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+            </button>
+            <button onClick={logout} className="p-2 bg-red-600/10 hover:bg-red-600/20 border border-red-500/20 rounded-xl transition-colors">
+              <LogOut className="w-4 h-4 text-red-500" />
+            </button>
+          </div>
+        </header>
+
+        {/* Main Menu */}
+        <main className="relative z-10 flex-1 overflow-y-auto p-4 md:p-8 pb-32">
+          <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+            {/* Play Now Section */}
+            <div className="space-y-4 bg-emerald-950/20 p-4 rounded-3xl border border-emerald-500/10">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Play className="w-5 h-5 text-emerald-500" />
+                  <h3 className="text-lg font-black uppercase tracking-tighter">Play Now</h3>
+                </div>
+                <span className="text-[10px] bg-emerald-500/20 text-emerald-500 px-2 py-0.5 rounded-full font-bold border border-emerald-500/30">50L Limit</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {[...Array(10)].map((_, i) => (
+                  <button 
+                    key={i} 
+                    onClick={() => joinRoom('PLAY_NOW', `table-${i + 1}`)}
+                    className="bg-black/40 backdrop-blur-xl border border-white/5 p-3 rounded-xl hover:bg-emerald-600/20 hover:border-emerald-500/40 transition-all text-left group relative overflow-hidden"
+                  >
+                    <div className="absolute top-0 right-0 p-1 opacity-5 group-hover:opacity-20 transition-opacity">
+                      <Play className="w-8 h-8" />
+                    </div>
+                    <div className="text-[8px] font-bold text-white/30 uppercase mb-0.5">Table {i + 1}</div>
+                    <div className="text-xs font-black group-hover:text-emerald-500 transition-colors">JOIN</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* No Limit Section */}
+            <div className="space-y-4 bg-red-950/20 p-4 rounded-3xl border border-red-500/10">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Trophy className="w-5 h-5 text-red-500" />
+                  <h3 className="text-lg font-black uppercase tracking-tighter">No Limit</h3>
+                </div>
+                <span className="text-[10px] bg-red-500/20 text-red-500 px-2 py-0.5 rounded-full font-bold border border-red-500/30">High Stakes</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {[...Array(10)].map((_, i) => (
+                  <button 
+                    key={i} 
+                    onClick={() => joinRoom('NO_LIMIT', `nolimit-${i + 1}`)}
+                    className="bg-black/40 backdrop-blur-xl border border-white/5 p-3 rounded-xl hover:bg-red-600/20 hover:border-red-500/40 transition-all text-left group relative overflow-hidden"
+                  >
+                    <div className="absolute top-0 right-0 p-1 opacity-5 group-hover:opacity-20 transition-opacity">
+                      <Trophy className="w-8 h-8" />
+                    </div>
+                    <div className="text-[8px] font-bold text-white/30 uppercase mb-0.5">Table {i + 1}</div>
+                    <div className="text-xs font-black group-hover:text-red-500 transition-colors">JOIN</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Private & Specials */}
+            <div className="space-y-4">
+              <div className="bg-gradient-to-br from-zinc-900 to-black p-6 rounded-[2rem] border border-white/10 shadow-2xl relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
+                  <Lock className="w-12 h-12" />
+                </div>
+                <h3 className="text-xl font-black uppercase mb-1">Private Table</h3>
+                <p className="text-[10px] text-white/40 mb-4">Play with friends using a secret code.</p>
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    placeholder="Code" 
+                    className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-red-500 transition-all"
+                  />
+                  <button className="bg-red-600 px-4 rounded-xl font-black text-xs hover:bg-red-500 transition-all">JOIN</button>
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-yellow-600/20 to-black p-6 rounded-[2rem] border border-yellow-500/20 shadow-2xl relative overflow-hidden group">
+                <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:rotate-12 transition-transform">
+                  <Disc className="w-12 h-12" />
+                </div>
+                <h3 className="text-xl font-black uppercase mb-1 text-yellow-500">Lucky Spin</h3>
+                <p className="text-[10px] text-white/40 mb-4">Win up to 20 Crore chips daily!</p>
+                <button onClick={() => setShowSpinWheel(true)} className="w-full bg-yellow-600 p-3 rounded-xl font-black text-xs hover:bg-yellow-500 transition-all text-black">SPIN NOW</button>
+              </div>
+            </div>
+          </div>
+        </main>
+
+        {/* Bottom Bar */}
+        <footer className="relative z-50 p-4 bg-black/60 backdrop-blur-2xl border-t border-white/5 flex items-center justify-center gap-8">
+          <button className="flex flex-col items-center gap-1 text-white/40 hover:text-white transition-colors">
+            <CreditCard className="w-5 h-5" />
+            <span className="text-[10px] font-black uppercase tracking-widest">Bonus</span>
+          </button>
+          <button className="flex flex-col items-center gap-1 text-white/40 hover:text-white transition-colors">
+            <Users className="w-5 h-5" />
+            <span className="text-[10px] font-black uppercase tracking-widest">Friends</span>
+          </button>
+          <button className="flex flex-col items-center gap-1 text-white/40 hover:text-white transition-colors">
+            <Settings className="w-5 h-5" />
+            <span className="text-[10px] font-black uppercase tracking-widest">Settings</span>
+          </button>
+        </footer>
       </div>
     );
   }
@@ -522,7 +730,7 @@ export default function App() {
             <img src={ASSETS.LOGO} alt="Logo" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
           </div>
           <div className="flex flex-col">
-            <h2 className="font-poker text-lg md:text-2xl leading-tight text-emerald-500 tracking-normal uppercase">
+            <h2 className="font-poker text-lg md:text-2xl leading-tight text-emerald-500 tracking-tighter uppercase drop-shadow-[0_0_10px_rgba(16,185,129,0.4)]">
               TEEN PATTI LUCIFER
             </h2>
             <div className="flex items-center gap-2">
@@ -580,7 +788,7 @@ export default function App() {
           )}
 
           <button 
-            onClick={() => window.location.reload()} 
+            onClick={() => setJoined(false)} 
             className="p-2 bg-red-600/10 hover:bg-red-600/20 border border-red-500/20 rounded-xl transition-colors group"
             title="Exit Game"
           >
@@ -879,26 +1087,30 @@ export default function App() {
                     {canShow && <button onClick={() => takeAction('show')} className="bg-emerald-600 text-white font-black px-3 md:px-8 py-2 md:py-4 rounded-xl md:rounded-2xl text-[9px] md:text-sm uppercase tracking-widest hover:bg-emerald-500 transition-all active:scale-95 shadow-xl border-b-2 md:border-b-4 border-emerald-800">Show</button>}
                     
                     <div className="flex items-stretch gap-px shadow-2xl rounded-xl md:rounded-2xl overflow-hidden">
-                      <button onClick={() => takeAction('chaal')} className="bg-red-600 text-white font-black px-4 md:px-12 py-2 md:py-4 uppercase tracking-widest min-w-[80px] md:min-w-[180px] hover:bg-red-500 transition-all active:scale-95 border-r border-red-400/20">
+                      <button onClick={() => takeAction('chaal')} className={`bg-red-600 text-white font-black px-4 md:px-12 py-2 md:py-4 uppercase tracking-widest ${gameState?.type === 'PLAY_NOW' ? 'w-full' : 'min-w-[80px] md:min-w-[180px]'} hover:bg-red-500 transition-all active:scale-95 border-r border-red-400/20`}>
                         <div className="flex flex-col items-center">
                           <span className="text-[7px] md:text-[10px] font-black text-white/60 leading-none mb-0.5 md:mb-1">CHAAL</span>
                           <span className="text-xs md:text-2xl leading-none">{(currentPlayer?.isBlind ? gameState?.lastBet : (gameState?.lastBet || 0) * 2)?.toLocaleString()} <span className="text-[8px] md:text-xs opacity-60">$(USD)</span></span>
                         </div>
                       </button>
-                      <button 
-                        onClick={() => takeAction('raise', 100000)} 
-                        className="bg-red-700 text-white font-black px-3 md:px-8 hover:bg-red-600 transition-all active:scale-95 flex items-center justify-center border-r border-red-400/20"
-                        title="Quick Raise +100k"
-                      >
-                        <Plus className="w-3 h-3 md:w-6 md:h-6" />
-                      </button>
-                      <button 
-                        onClick={handleRaise} 
-                        className="bg-red-800 text-white font-black px-3 md:px-8 hover:bg-red-700 transition-all active:scale-95 flex items-center justify-center"
-                        title="Custom Raise"
-                      >
-                        <Settings className="w-3 h-3 md:w-6 md:h-6" />
-                      </button>
+                      {gameState?.type !== 'PLAY_NOW' && (
+                        <>
+                          <button 
+                            onClick={() => takeAction('raise', 100000)} 
+                            className="bg-red-700 text-white font-black px-3 md:px-8 hover:bg-red-600 transition-all active:scale-95 flex items-center justify-center border-r border-red-400/20"
+                            title="Quick Raise +100k"
+                          >
+                            <Plus className="w-3 h-3 md:w-6 md:h-6" />
+                          </button>
+                          <button 
+                            onClick={handleRaise} 
+                            className="bg-red-800 text-white font-black px-3 md:px-8 hover:bg-red-700 transition-all active:scale-95 flex items-center justify-center"
+                            title="Custom Raise"
+                          >
+                            <Settings className="w-3 h-3 md:w-6 md:h-6" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </motion.div>
                 )}
