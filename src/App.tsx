@@ -652,36 +652,24 @@ export default function App() {
 
   if (view === 'login') {
     return (
-      <div className="fixed inset-0 bg-[#050505] text-white font-sans overflow-hidden flex flex-col select-none touch-none">
+      <div className="fixed inset-0 bg-black text-white font-sans overflow-hidden flex flex-col select-none touch-none">
         <div className="absolute inset-0 z-0 pointer-events-none">
-          <img src={ASSETS.TABLE_BG} alt="Background" className="w-full h-full object-cover opacity-20" referrerPolicy="no-referrer" />
-          <div className="absolute inset-0 bg-gradient-to-b from-black via-transparent to-black" />
+          <img src="https://i.imgur.com/oEnM0Fz.png" alt="Background" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
         </div>
 
         <div className="relative z-10 flex-1 flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-black/60 backdrop-blur-3xl p-8 rounded-[2.5rem] border border-white/10 shadow-2xl text-center relative overflow-hidden">
-            <div className="absolute -top-24 -left-24 w-48 h-48 bg-red-600/20 blur-[100px]" />
-            <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-red-600/20 blur-[100px]" />
-            
+          <div className="w-full max-w-md bg-black/40 backdrop-blur-md p-8 rounded-[2.5rem] border border-white/10 shadow-2xl text-center relative overflow-hidden">
             <div className="relative z-10">
-              <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="w-32 h-32 mx-auto mb-4">
-                <img src={ASSETS.DEALER} alt="Dealer" className="w-full h-full object-contain drop-shadow-2xl" referrerPolicy="no-referrer" />
-              </motion.div>
-
-              <div className="text-red-600 text-[10px] font-bold uppercase tracking-[0.3em] mb-4">ULTRA UPDATE v3.0</div>
-              <h1 className="font-poker text-3xl md:text-5xl mb-1 tracking-tighter uppercase text-emerald-500 drop-shadow-[0_0_15px_rgba(16,185,129,0.6)]">
-                TEEN PATTI LUCIFER
-              </h1>
-              <p className="text-white/40 text-sm mb-8 font-bold">50K Chips & Lucifer Bots Active!</p>
+              <p className="text-white/80 text-sm mb-8 font-bold tracking-wide drop-shadow-lg">50K Chips & Lucifer Bots Active!</p>
               
               <div className="space-y-4">
                 <div className="relative">
-                  <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/20" />
-                  <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Your Name" className="w-full bg-white/5 p-4 pl-12 rounded-2xl border border-white/10 outline-none focus:border-red-600 transition-all font-bold" />
+                  <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
+                  <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Your Name" className="w-full bg-black/40 p-4 pl-12 rounded-2xl border border-white/20 outline-none focus:border-red-600 transition-all font-bold text-white placeholder:text-white/20" />
                 </div>
                 <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/20" />
-                  <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Set/Enter Password" className="w-full bg-white/5 p-4 pl-12 rounded-2xl border border-white/10 outline-none focus:border-red-600 transition-all font-bold" />
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
+                  <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Set/Enter Password" className="w-full bg-black/40 p-4 pl-12 rounded-2xl border border-white/20 outline-none focus:border-red-600 transition-all font-bold text-white placeholder:text-white/20" />
                 </div>
                 <button onClick={login} disabled={!name} className="w-full bg-red-600 p-5 rounded-2xl font-black text-xl hover:bg-red-500 transition-all active:scale-95 text-white shadow-[0_0_40px_rgba(220,38,38,0.4)] border-b-4 border-red-800">
                   ENTER UNDERWORLD
