@@ -657,19 +657,19 @@ export default function App() {
           <img src="https://i.imgur.com/oEnM0Fz.png" alt="Background" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
         </div>
 
-        <div className="relative z-10 flex-1 flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-black/40 backdrop-blur-md p-8 rounded-[2.5rem] border border-white/10 shadow-2xl text-center relative overflow-hidden">
+        <div className="relative z-10 flex-1 flex items-end justify-center p-4 pb-16 md:pb-24">
+          <div className="w-full max-w-md bg-black/10 backdrop-blur-sm p-8 rounded-[2.5rem] border border-white/10 shadow-2xl text-center relative overflow-hidden">
             <div className="relative z-10">
               <p className="text-white/80 text-sm mb-8 font-bold tracking-wide drop-shadow-lg">50K Chips & Lucifer Bots Active!</p>
               
               <div className="space-y-4">
                 <div className="relative">
                   <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
-                  <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Your Name" className="w-full bg-black/40 p-4 pl-12 rounded-2xl border border-white/20 outline-none focus:border-red-600 transition-all font-bold text-white placeholder:text-white/20" />
+                  <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Your Name" className="w-full bg-black/20 p-4 pl-12 rounded-2xl border border-white/20 outline-none focus:border-red-600 transition-all font-bold text-white placeholder:text-white/20" />
                 </div>
                 <div className="relative">
                   <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
-                  <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Set/Enter Password" className="w-full bg-black/40 p-4 pl-12 rounded-2xl border border-white/20 outline-none focus:border-red-600 transition-all font-bold text-white placeholder:text-white/20" />
+                  <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Set/Enter Password" className="w-full bg-black/20 p-4 pl-12 rounded-2xl border border-white/20 outline-none focus:border-red-600 transition-all font-bold text-white placeholder:text-white/20" />
                 </div>
                 <button onClick={login} disabled={!name} className="w-full bg-red-600 p-5 rounded-2xl font-black text-xl hover:bg-red-500 transition-all active:scale-95 text-white shadow-[0_0_40px_rgba(220,38,38,0.4)] border-b-4 border-red-800">
                   ENTER UNDERWORLD
