@@ -144,7 +144,7 @@ const generateUID = () => {
   return Math.random().toString(36).substring(2, 10).toUpperCase();
 };
 
-const getPlayerChips = async (name: string, password?: string, ignorePassword = false): Promise<{ chips: number, last_spin: number, profilePic?: string, uid?: string, error?: string }> => {
+const getPlayerChips = async (name: string, password?: string, ignorePassword = false): Promise<{ chips: number, last_spin: number, last_bonus: number, profilePic?: string, uid?: string, error?: string }> => {
   if (!db) {
     const projectId = firebaseConfig?.projectId || process.env.FIREBASE_PROJECT_ID;
     const apiKey = firebaseConfig?.apiKey || process.env.FIREBASE_API_KEY;
@@ -152,7 +152,7 @@ const getPlayerChips = async (name: string, password?: string, ignorePassword = 
     if (!projectId || !apiKey) {
       detail = "Firebase configuration (Project ID or API Key) is missing in the environment.";
     }
-    return { chips: 0, last_spin: 0, error: `Database connection error: ${detail} Please check your environment variables.` };
+    return { chips: 0, last_spin: 0, last_bonus: 0, error: `Database connection error: ${detail} Please check your environment variables.` };
   }
   try {
     const safeName = name.toLowerCase().trim();
@@ -164,7 +164,7 @@ const getPlayerChips = async (name: string, password?: string, ignorePassword = 
       
       // If ignorePassword is true, we are doing an internal update (like spin or admin)
       if (ignorePassword) {
-        return { chips: (data.chips !== undefined) ? Number(data.chips) : 50000, last_spin: data.last_spin || 0, profilePic: data.profilePic, uid: data.uid };
+        return { chips: (data.chips !== undefined) ? Number(data.chips) : 50000, last_spin: data.last_spin || 0, last_bonus: data.last_bonus || 0, profilePic: data.profilePic, uid: data.uid };
       }
  
       // If the account HAS a password, we MUST verify it.
@@ -173,7 +173,7 @@ const getPlayerChips = async (name: string, password?: string, ignorePassword = 
         const providedPass = (password && typeof password === 'string') ? password.trim() : "";
         
         if (providedPass === "" || storedPass !== providedPass) {
-          return { chips: 0, last_spin: 0, error: 'Username already exists. Choose a different name.' };
+          return { chips: 0, last_spin: 0, last_bonus: 0, error: 'Username already exists. Choose a different name.' };
         }
       } else if (password && typeof password === 'string' && password.trim() !== "") {
         // If the account has NO password, but the user provided one, SET it now (claiming the account)
@@ -187,7 +187,7 @@ const getPlayerChips = async (name: string, password?: string, ignorePassword = 
         data.uid = newUid;
       }
       
-      return { chips: (data.chips !== undefined) ? Number(data.chips) : 50000, last_spin: data.last_spin || 0, profilePic: data.profilePic, uid: data.uid };
+      return { chips: (data.chips !== undefined) ? Number(data.chips) : 50000, last_spin: data.last_spin || 0, last_bonus: data.last_bonus || 0, profilePic: data.profilePic, uid: data.uid };
     }
     
     const initialChips = 50000;
@@ -197,14 +197,15 @@ const getPlayerChips = async (name: string, password?: string, ignorePassword = 
       uid: newUid,
       chips: initialChips,
       last_spin: 0,
+      last_bonus: 0,
       password: (password && password.trim() !== "") ? password.trim() : ''
     };
     await setDoc(playerRef, newData);
-    return { chips: initialChips, last_spin: 0, uid: newUid };
+    return { chips: initialChips, last_spin: 0, last_bonus: 0, uid: newUid };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error('Firestore Error in getPlayerChips:', error);
-    return { chips: 0, last_spin: 0, error: `Database connection error: ${errorMsg}. Please try again later.` };
+    return { chips: 0, last_spin: 0, last_bonus: 0, error: `Database connection error: ${errorMsg}. Please try again later.` };
   }
 };
 
@@ -519,7 +520,7 @@ async function startServer() {
           socket.emit("error", dbData.error);
           return;
         }
-        socket.emit("loginSuccess", { name, chips: dbData.chips, last_spin: dbData.last_spin, profilePic: dbData.profilePic, uid: dbData.uid });
+        socket.emit("loginSuccess", { name, chips: dbData.chips, last_spin: dbData.last_spin, last_bonus: dbData.last_bonus, profilePic: dbData.profilePic, uid: dbData.uid });
       } catch (error) {
         console.error("Login error:", error);
         socket.emit("error", "Login failed. Please try again.");
@@ -1140,6 +1141,41 @@ async function startServer() {
       } catch (error) {
         console.error('Spin Wheel Error:', error);
         socket.emit("spinError", { message: "Internal Server Error during spin" });
+      }
+    });
+
+    socket.on("collectBonus", async ({ name }) => {
+      try {
+        const dbData = await getPlayerChips(name, undefined, true);
+        const now = Date.now();
+        const sixHours = 6 * 60 * 60 * 1000;
+
+        if (now - dbData.last_bonus < sixHours) {
+          const remaining = sixHours - (now - dbData.last_bonus);
+          const hours = Math.floor(remaining / (1000 * 60 * 60));
+          const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+          return socket.emit("bonusError", { message: `Wait ${hours}h ${minutes}m for next bonus!` });
+        }
+
+        const bonusAmount = 10000;
+        const newChips = dbData.chips + bonusAmount;
+
+        const playerRef = doc(db, 'players', name.toLowerCase().trim());
+        await updateDoc(playerRef, { chips: newChips, last_bonus: now });
+
+        socket.emit("bonusResult", { amount: bonusAmount, chips: newChips, lastBonus: now });
+        
+        // Update in-game chips if player is in a room
+        Object.keys(rooms).forEach(r => {
+          const p = rooms[r].players.find((pl: any) => pl.name.toLowerCase().trim() === name.toLowerCase().trim());
+          if (p) {
+            p.chips = newChips;
+            emitGameState(r);
+          }
+        });
+      } catch (error) {
+        console.error("Bonus error:", error);
+        socket.emit("bonusError", { message: "Failed to collect bonus. Try again." });
       }
     });
   });
