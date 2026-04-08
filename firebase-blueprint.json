@@ -9,6 +9,10 @@
           "type": "string",
           "description": "The unique name of the player"
         },
+        "uid": {
+          "type": "string",
+          "description": "Unique identifier for the player"
+        },
         "chips": {
           "type": "number",
           "description": "The current chip count"
@@ -17,12 +21,20 @@
           "type": "number",
           "description": "Timestamp of the last daily spin"
         },
+        "last_bonus": {
+          "type": "number",
+          "description": "Timestamp of the last 6-hour bonus"
+        },
+        "profilePic": {
+          "type": "string",
+          "description": "Base64 encoded profile picture"
+        },
         "password": {
           "type": "string",
           "description": "Hashed or plain password for security"
         }
       },
-      "required": ["name", "chips"]
+      "required": ["name", "uid", "chips"]
     }
   },
   "firestore": {
