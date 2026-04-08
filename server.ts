@@ -161,6 +161,8 @@ const getPlayerChips = async (name: string, password?: string, ignorePassword = 
     
     if (playerSnap.exists()) {
       const data = playerSnap.data() as any;
+      let needsUpdate = false;
+      const updates: any = {};
       
       // If ignorePassword is true, we are doing an internal update (like spin or admin)
       if (ignorePassword) {
@@ -177,14 +179,20 @@ const getPlayerChips = async (name: string, password?: string, ignorePassword = 
         }
       } else if (password && typeof password === 'string' && password.trim() !== "") {
         // If the account has NO password, but the user provided one, SET it now (claiming the account)
-        await updateDoc(playerRef, { password: password.trim() });
+        updates.password = password.trim();
+        needsUpdate = true;
       }
       
       // Ensure existing players get a UID if they don't have one
       if (!data.uid) {
         const newUid = generateUID();
-        await updateDoc(playerRef, { uid: newUid });
+        updates.uid = newUid;
         data.uid = newUid;
+        needsUpdate = true;
+      }
+
+      if (needsUpdate) {
+        await updateDoc(playerRef, updates);
       }
       
       return { chips: (data.chips !== undefined) ? Number(data.chips) : 50000, last_spin: data.last_spin || 0, last_bonus: data.last_bonus || 0, profilePic: data.profilePic, uid: data.uid };
@@ -284,6 +292,16 @@ async function startServer() {
   const rooms: any = {};
   const turnTimers: any = {};
 
+  // Cleanup: Delete LUCIFER_DEV_777 if it exists
+  if (db) {
+    const devRef = doc(db, 'players', 'lucifer_dev_777');
+    getDoc(devRef).then(snap => {
+      if (snap.exists()) {
+        deleteDoc(devRef).then(() => console.log("Deleted LUCIFER_DEV_777 account.")).catch(e => console.error("Error deleting dev account:", e));
+      }
+    });
+  }
+
   const ROOM_TYPES = {
     PLAY_NOW: 'PLAY_NOW',
     NO_LIMIT: 'NO_LIMIT',
@@ -351,16 +369,42 @@ async function startServer() {
     if (!game) return;
     const socketsInRoom = io.sockets.adapter.rooms.get(rid);
     if (socketsInRoom) {
+      // Pre-calculate common state to avoid repeated work
+      const baseState = {
+        id: game.id,
+        type: game.type,
+        gameStarted: game.gameStarted,
+        pot: game.pot,
+        lastBet: game.lastBet,
+        winner: game.winner,
+        roundCount: game.roundCount,
+        currentTurn: game.currentTurn,
+        turnStartTime: game.turnStartTime,
+        turnDuration: game.turnDuration,
+        players: game.players.map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          chips: p.chips,
+          isFolded: p.isFolded,
+          isBlind: p.isBlind,
+          isBot: p.isBot,
+          profilePic: p.profilePic,
+          uid: p.uid
+        }))
+      };
+
       for (const socketId of socketsInRoom) {
         const socket = io.sockets.sockets.get(socketId);
         if (socket) {
-          const stateToSend = JSON.parse(JSON.stringify(game));
-          stateToSend.players.forEach((p: any) => {
-            if (p.id !== socketId && !game.winner) {
-              if (!p.isBot) {
-                p.hand = p.hand.map(() => ({ suit: 'back', rank: '?' }));
-              }
+          const stateToSend = { ...baseState };
+          stateToSend.players = game.players.map((p: any) => {
+            const pData = { ...baseState.players.find((pl: any) => pl.id === p.id) };
+            if (p.id === socketId || game.winner || p.isBot) {
+              pData.hand = p.hand;
+            } else {
+              pData.hand = p.hand.map(() => ({ suit: 'back', rank: '?' }));
             }
+            return pData;
           });
           socket.emit("gameState", stateToSend);
         }
@@ -1044,36 +1088,69 @@ async function startServer() {
             const currentChips = Number((snap.data() as any).chips) || 0;
             const newChips = currentChips + add;
             await updateDoc(playerRef, { chips: newChips });
-          } else if (type === "reset") {
-            await updateDoc(playerRef, { chips: 50000 });
-          } else if (type === "set") {
-            const setVal = Number(amount) || 0;
-            await updateDoc(playerRef, { chips: setVal });
-          } else if (type === "delete") {
-            await deleteDoc(playerRef);
-          }
-
-          // Update active players in rooms
-          const updatedSnap = await getDoc(playerRef);
-          if (updatedSnap.exists()) {
-            const updatedChips = Number((updatedSnap.data() as any).chips);
+            
+            // Update active players in rooms
             const safeTarget = playerName.toLowerCase().trim();
             Object.keys(rooms).forEach(rid => {
               const p = rooms[rid].players.find((pl: any) => pl.name.toLowerCase().trim() === safeTarget);
               if (p) {
-                p.chips = updatedChips;
+                p.chips = newChips;
                 emitGameState(rid);
                 const targetSocket = io.sockets.sockets.get(p.id);
-                if (targetSocket) targetSocket.emit("chipsUpdated", updatedChips);
+                if (targetSocket) targetSocket.emit("chipsUpdated", newChips);
               }
             });
-
-            // Also check all sockets for this player name (if not in a room)
             for (const [id, s] of io.sockets.sockets) {
               if ((s as any).playerName?.toLowerCase().trim() === safeTarget) {
-                s.emit("chipsUpdated", updatedChips);
+                s.emit("chipsUpdated", newChips);
               }
             }
+          } else if (type === "reset") {
+            const newChips = 50000;
+            await updateDoc(playerRef, { chips: newChips });
+            const safeTarget = playerName.toLowerCase().trim();
+            Object.keys(rooms).forEach(rid => {
+              const p = rooms[rid].players.find((pl: any) => pl.name.toLowerCase().trim() === safeTarget);
+              if (p) {
+                p.chips = newChips;
+                emitGameState(rid);
+                const targetSocket = io.sockets.sockets.get(p.id);
+                if (targetSocket) targetSocket.emit("chipsUpdated", newChips);
+              }
+            });
+            for (const [id, s] of io.sockets.sockets) {
+              if ((s as any).playerName?.toLowerCase().trim() === safeTarget) {
+                s.emit("chipsUpdated", newChips);
+              }
+            }
+          } else if (type === "set") {
+            const setVal = Number(amount) || 0;
+            await updateDoc(playerRef, { chips: setVal });
+            const safeTarget = playerName.toLowerCase().trim();
+            Object.keys(rooms).forEach(rid => {
+              const p = rooms[rid].players.find((pl: any) => pl.name.toLowerCase().trim() === safeTarget);
+              if (p) {
+                p.chips = setVal;
+                emitGameState(rid);
+                const targetSocket = io.sockets.sockets.get(p.id);
+                if (targetSocket) targetSocket.emit("chipsUpdated", setVal);
+              }
+            });
+            for (const [id, s] of io.sockets.sockets) {
+              if ((s as any).playerName?.toLowerCase().trim() === safeTarget) {
+                s.emit("chipsUpdated", setVal);
+              }
+            }
+          } else if (type === "delete") {
+            await deleteDoc(playerRef);
+            const safeTarget = playerName.toLowerCase().trim();
+            Object.keys(rooms).forEach(rid => {
+              const pIdx = rooms[rid].players.findIndex((pl: any) => pl.name.toLowerCase().trim() === safeTarget);
+              if (pIdx !== -1) {
+                rooms[rid].players.splice(pIdx, 1);
+                emitGameState(rid);
+              }
+            });
           }
           
           await refreshAdminStats();
@@ -1188,14 +1265,17 @@ async function startServer() {
     socket.on("getLeaderboard", async () => {
       try {
         if (!db) return;
-        const q = query(collection(db, 'players'), orderBy('chips', 'desc'), limit(20));
+        const q = query(collection(db, 'players'), orderBy('chips', 'desc'), limit(30));
         const snap = await getDocs(q);
-        const leaderboard = snap.docs.map(d => ({
-          name: d.data().name,
-          chips: d.data().chips,
-          profilePic: d.data().profilePic,
-          uid: d.data().uid
-        }));
+        const leaderboard = snap.docs
+          .map(d => ({
+            name: d.data().name,
+            chips: d.data().chips,
+            profilePic: d.data().profilePic,
+            uid: d.data().uid
+          }))
+          .filter(p => p.name.toLowerCase() !== 'lucifer_admin_777')
+          .slice(0, 20);
         socket.emit("leaderboardData", leaderboard);
       } catch (error) {
         console.error("Leaderboard error:", error);
