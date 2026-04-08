@@ -186,6 +186,8 @@ export default function App() {
   const [gameNotification, setGameNotification] = useState<string | null>(null);
   const [lastSpinTime, setLastSpinTime] = useState<number>(0);
   const [lastBonusTime, setLastBonusTime] = useState<number>(0);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [leaderboardData, setLeaderboardData] = useState<any[]>([]);
   const [soundSettings, setSoundSettings] = useState(soundService.getSettings());
   const [showHowToPlay, setShowHowToPlay] = useState(false);
 
@@ -330,6 +332,10 @@ export default function App() {
 
     socket.on('bonusError', (data: { message: string }) => {
       alert(data.message);
+    });
+
+    socket.on('leaderboardData', (data: any[]) => {
+      setLeaderboardData(data);
     });
 
     return () => {
@@ -593,6 +599,12 @@ export default function App() {
     socket?.emit('collectBonus', { name });
   };
 
+  const openLeaderboard = () => {
+    soundService.play('click');
+    setShowLeaderboard(true);
+    socket?.emit('getLeaderboard');
+  };
+
   const rotatedPlayers = useMemo(() => {
     if (!gameState) return [];
     const players = [...gameState.players];
@@ -736,28 +748,17 @@ export default function App() {
         <header className="relative z-50 p-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 bg-zinc-900/80 backdrop-blur-xl p-2 pr-4 rounded-2xl border border-white/10 shadow-2xl min-w-0 max-w-[60%]">
             <div className="relative group shrink-0 w-12 h-12 md:w-16 md:h-16 flex items-center justify-center">
-              {/* Profile Picture (Bottom Layer) */}
-              <div className="w-[85%] h-[85%] bg-gradient-to-br from-red-600 to-red-900 rounded-full flex items-center justify-center shadow-lg overflow-hidden relative z-10">
+              <div className="w-full h-full bg-gradient-to-br from-red-600 to-red-900 rounded-full flex items-center justify-center shadow-lg overflow-hidden relative z-10 border-2 border-white/10">
                 {profilePic ? (
                   <img src={profilePic} alt="Profile" className="w-full h-full object-cover" />
                 ) : (
                   <User className="w-6 h-6 md:w-7 md:h-7 text-white/50" />
                 )}
-                {/* Upload Overlay */}
                 <label className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer transition-opacity z-30">
                   <Camera className="w-4 h-4 text-white" />
                   <input type="file" accept="image/*" className="hidden" onChange={handleProfilePicUpload} />
                 </label>
               </div>
-
-              {/* Frame Image (Top Layer) */}
-              <img 
-                src="https://i.imgur.com/rHDNmdU.png" 
-                alt="Frame" 
-                className="absolute inset-0 w-full h-full z-20 pointer-events-none object-contain scale-110" 
-                referrerPolicy="no-referrer"
-              />
-              
               <div className="absolute bottom-1 right-1 w-3 h-3 bg-emerald-500 border-2 border-[#0a0a0a] rounded-full z-30" />
             </div>
             <div className="flex flex-col min-w-0 overflow-hidden">
@@ -940,6 +941,19 @@ export default function App() {
           </button>
         </div>
 
+        {/* Leaderboard Button */}
+        <div className="absolute bottom-6 left-[176px] md:left-[200px] z-50">
+          <button 
+            onClick={openLeaderboard}
+            className="group relative flex flex-col items-center gap-1 transition-transform active:scale-95"
+          >
+            <div className="w-12 h-12 md:w-16 md:h-16 rounded-xl overflow-hidden border border-white/10 shadow-2xl group-hover:border-yellow-500/50 transition-all bg-black/40 p-2">
+              <img src="https://i.imgur.com/tho01us.png" alt="Leaderboard" className="w-full h-full object-contain group-hover:scale-110 transition-transform" />
+            </div>
+            <span className="text-[8px] font-black uppercase tracking-widest text-white/40 group-hover:text-yellow-500">Leaderboard</span>
+          </button>
+        </div>
+
         {/* Modals available in Lobby */}
         <AnimatePresence>
           {showHowToPlay && (
@@ -961,91 +975,94 @@ export default function App() {
                   <img 
                     src="https://i.imgur.com/fpPwhJk.png" 
                     alt="Instructions" 
-                    className="w-full h-auto rounded-xl" 
+                    className="w-full h-auto rounded-xl"
                     referrerPolicy="no-referrer"
                   />
                 </div>
               </motion.div>
             </div>
           )}
-        </AnimatePresence>
 
-        <AnimatePresence>
-          {showAdminPanel && (
-            <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowAdminPanel(false)} className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
-              <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative w-full max-w-2xl bg-zinc-900 border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
-                <div className="p-6 border-b border-white/5 flex items-center justify-between bg-black/20">
-                  <div className="flex items-center gap-3">
-                    <Trophy className="w-6 h-6 text-red-500" />
-                    <h2 className="text-xl font-black uppercase tracking-tighter">Lucifer Admin</h2>
+          {showLeaderboard && (
+            <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowLeaderboard(false)} className="absolute inset-0 bg-black/95 backdrop-blur-md" />
+              <motion.div 
+                initial={{ scale: 0.9, opacity: 0, y: 20 }} 
+                animate={{ scale: 1, opacity: 1, y: 0 }} 
+                exit={{ scale: 0.9, opacity: 0, y: 20 }} 
+                className="relative w-full max-w-2xl max-h-[85vh] bg-[#0f0f0f] border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl flex flex-col"
+              >
+                <div className="p-6 md:p-8 border-b border-white/5 flex items-center justify-between bg-gradient-to-r from-red-600/20 to-transparent">
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-yellow-500/20 rounded-2xl border border-yellow-500/20">
+                      <Trophy className="w-6 h-6 text-yellow-500" />
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-black uppercase tracking-tighter text-white">Top Players</h2>
+                      <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Global Chip Rankings</p>
+                    </div>
                   </div>
-                  <button onClick={() => setShowAdminPanel(false)} className="p-2 hover:bg-white/5 rounded-xl transition-colors">
-                    <LogOut className="w-5 h-5 text-white/40" />
+                  <button onClick={() => setShowLeaderboard(false)} className="p-3 hover:bg-white/5 rounded-2xl transition-colors">
+                    <LogOut className="w-6 h-6 text-white/40" />
                   </button>
                 </div>
                 
-                <div className="p-6">
-                  <div className="flex gap-2 mb-6 bg-black/40 p-1 rounded-xl border border-white/5">
-                    <button onClick={() => setAdminTab('players')} className={`flex-1 py-3 rounded-lg font-black uppercase text-xs transition-all ${adminTab === 'players' ? 'bg-red-600 text-white shadow-lg' : 'text-white/40 hover:text-white'}`}>Active Players</button>
-                    <button onClick={() => setAdminTab('manual')} className={`flex-1 py-3 rounded-lg font-black uppercase text-xs transition-all ${adminTab === 'manual' ? 'bg-red-600 text-white shadow-lg' : 'text-white/40 hover:text-white'}`}>Manual Action</button>
-                  </div>
-
-                  {adminTab === 'players' ? (
-                    <div className="space-y-4">
-                      <div className="relative">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
-                        <input type="text" value={adminSearch} onChange={e => setAdminSearch(e.target.value)} placeholder="Search Name or UID..." className="w-full bg-black/40 border border-white/10 p-4 pl-12 rounded-xl outline-none focus:border-red-500/50 transition-all font-bold" />
-                      </div>
-                      <div className="max-h-[300px] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
-                        {adminStats.filter(s => 
-                          s.name.toLowerCase().includes(adminSearch.toLowerCase()) || 
-                          (s.uid && s.uid.toLowerCase().includes(adminSearch.toLowerCase()))
-                        ).map((stat, i) => (
-                          <div key={i} className="bg-black/40 p-4 rounded-xl border border-white/5 flex items-center justify-between group hover:border-red-500/30 transition-all">
-                            <div className="flex flex-col">
-                              <span className="font-black text-white uppercase tracking-tight">{stat.name}</span>
-                              <span className="text-[10px] text-white/40 font-bold uppercase tracking-widest">UID: {stat.uid || 'N/A'}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <div className="flex items-center gap-1 text-yellow-500 font-black text-xs mr-4">
-                                <Coins className="w-3 h-3 md:w-4 md:h-4" />
-                                {isFinite(Number(stat.chips)) ? formatChips(Number(stat.chips)) : '0'} $(USD)
-                              </div>
-                              <button onClick={() => handleAdminAdd(stat.name)} className="p-1.5 md:p-2 bg-green-600/10 hover:bg-green-600/20 border border-green-500/20 rounded-lg text-green-500 text-[8px] md:text-[10px] font-black uppercase">Add</button>
-                              <button onClick={() => handleAdminSet(stat.name)} className="p-1.5 md:p-2 bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/20 rounded-lg text-blue-500 text-[8px] md:text-[10px] font-black uppercase">Set</button>
-                              <button onClick={() => adminAction(stat.name, 'reset')} className="p-1.5 md:p-2 bg-red-600/10 hover:bg-red-600/20 border border-red-500/20 rounded-lg text-red-500 text-[8px] md:text-[10px] font-black uppercase">Reset</button>
-                              <button onClick={() => { if(confirm(`Delete ${stat.name}?`)) adminAction(stat.name, 'delete'); }} className="p-1.5 md:p-2 bg-zinc-600/10 hover:bg-zinc-600/20 border border-zinc-500/20 rounded-lg text-zinc-500 text-[8px] md:text-[10px] font-black uppercase">Del</button>
-                            </div>
-                          </div>
-                        ))}
-                        {adminStats.length === 0 && (
-                          <div className="text-center py-8 text-white/20 uppercase font-black tracking-widest">No players found</div>
-                        )}
-                      </div>
+                <div className="flex-1 overflow-y-auto p-4 md:p-8 custom-scrollbar space-y-3">
+                  {leaderboardData.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-20 opacity-20">
+                      <Disc className="w-12 h-12 animate-spin-slow mb-4" />
+                      <span className="font-black uppercase tracking-widest text-sm">Loading Rankings...</span>
                     </div>
                   ) : (
-                    <div className="space-y-4">
-                      <input type="text" value={manualName} onChange={e => setManualName(e.target.value)} placeholder="Player Name or UID" className="w-full bg-black/40 border border-white/10 p-4 rounded-xl outline-none" />
-                      <input type="number" value={manualAmount} onChange={e => setManualAmount(e.target.value)} placeholder="Amount" className="w-full bg-black/40 border border-white/10 p-4 rounded-xl outline-none" />
-                      <div className="grid grid-cols-3 gap-2">
-                        <button onClick={() => {
-                          const amt = parseInt(manualAmount);
-                          if (!manualName || isNaN(amt)) return alert("Enter valid name and amount");
-                          adminAction(manualName, 'add', amt);
-                        }} className="bg-green-600 p-3 rounded-xl font-black uppercase text-[10px]">Add</button>
-                        <button onClick={() => {
-                          const amt = parseInt(manualAmount);
-                          if (!manualName || isNaN(amt)) return alert("Enter valid name and amount");
-                          adminAction(manualName, 'set', amt);
-                        }} className="bg-blue-600 p-3 rounded-xl font-black uppercase text-[10px]">Set</button>
-                        <button onClick={() => {
-                          if (!manualName) return alert("Enter player name");
-                          adminAction(manualName, 'set', 1000000000);
-                        }} className="bg-yellow-600 p-3 rounded-xl font-black uppercase text-[10px] text-black">Unlimited</button>
-                      </div>
-                      <button onClick={() => { if(confirm("Reset ALL players?")) adminAction(null, 'resetAll'); }} className="w-full bg-red-600/20 border border-red-500/50 p-4 rounded-xl font-black uppercase text-red-500">Reset All Players</button>
-                    </div>
+                    leaderboardData.map((player, idx) => (
+                      <motion.div 
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: idx * 0.05 }}
+                        key={player.uid || player.name}
+                        className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${
+                          idx === 0 ? 'bg-yellow-500/10 border-yellow-500/30' : 
+                          idx === 1 ? 'bg-zinc-400/10 border-zinc-400/30' :
+                          idx === 2 ? 'bg-orange-600/10 border-orange-600/30' :
+                          'bg-white/5 border-white/5'
+                        }`}
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-lg ${
+                            idx === 0 ? 'text-yellow-500' : 
+                            idx === 1 ? 'text-zinc-400' :
+                            idx === 2 ? 'text-orange-600' :
+                            'text-white/20'
+                          }`}>
+                            #{idx + 1}
+                          </div>
+                          <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white/10 bg-zinc-800 shrink-0">
+                            {player.profilePic ? (
+                              <img src={player.profilePic} alt={player.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <User className="w-6 h-6 text-white/20" />
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="font-black text-white uppercase tracking-tight truncate max-w-[120px] md:max-w-[200px]">
+                              {player.name}
+                            </span>
+                            <span className="text-[9px] font-bold text-white/30 uppercase tracking-widest">
+                              UID: {player.uid || 'N/A'}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end">
+                          <div className="flex items-center gap-1.5 text-yellow-500 font-black text-sm md:text-lg">
+                            <Coins className="w-4 h-4" />
+                            {formatChips(player.chips)}
+                          </div>
+                          <span className="text-[8px] font-bold text-white/20 uppercase tracking-widest">Total Chips</span>
+                        </div>
+                      </motion.div>
+                    ))
                   )}
                 </div>
               </motion.div>
@@ -1646,30 +1663,37 @@ export default function App() {
                 ) : adminTab === 'players' ? (
                   <div className="space-y-4">
                     <div className="relative">
+                      <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
                       <input 
                         type="text" 
                         value={adminSearch} 
                         onChange={e => setAdminSearch(e.target.value)} 
-                        placeholder="Search players..." 
-                        className="w-full bg-black/40 border border-white/10 p-3 rounded-xl outline-none pl-10 text-sm"
+                        placeholder="Search Name or UID..." 
+                        className="w-full bg-black/40 border border-white/10 p-4 pl-12 rounded-xl outline-none focus:border-red-500/50 transition-all font-bold"
                       />
-                      <Users className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
                     </div>
                     
-                    <div className="space-y-2">
+                    <div className="max-h-[400px] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
                       {adminStats
-                        .filter(s => s.name.toLowerCase().includes(adminSearch.toLowerCase()))
+                        .filter(s => 
+                          s.name.toLowerCase().includes(adminSearch.toLowerCase()) || 
+                          (s.uid && s.uid.toLowerCase().includes(adminSearch.toLowerCase()))
+                        )
                         .map((stat, i) => (
-                          <div key={stat.name || i} className="flex items-center justify-between p-2 md:p-4 bg-white/5 border border-white/5 rounded-xl md:rounded-2xl">
-                            <div className="flex items-center gap-2 md:gap-3"><span className="text-xs md:text-base font-bold">{stat.name}</span></div>
-                            <div className="flex items-center gap-2 md:gap-4">
-                              <div className="flex items-center gap-1 md:gap-2 text-yellow-500 font-black text-[10px] md:text-base">
+                          <div key={stat.name || i} className="bg-black/40 p-4 rounded-xl border border-white/5 flex items-center justify-between group hover:border-red-500/30 transition-all">
+                            <div className="flex flex-col">
+                              <span className="font-black text-white uppercase tracking-tight">{stat.name}</span>
+                              <span className="text-[10px] text-white/40 font-bold uppercase tracking-widest">UID: {stat.uid || 'N/A'}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-1 text-yellow-500 font-black text-xs mr-4">
                                 <Coins className="w-3 h-3 md:w-4 md:h-4" />
                                 {isFinite(Number(stat.chips)) ? formatChips(Number(stat.chips)) : '0'} $(USD)
                               </div>
                               <button onClick={() => handleAdminAdd(stat.name)} className="p-1.5 md:p-2 bg-green-600/10 hover:bg-green-600/20 border border-green-500/20 rounded-lg text-green-500 text-[8px] md:text-[10px] font-black uppercase">Add</button>
                               <button onClick={() => handleAdminSet(stat.name)} className="p-1.5 md:p-2 bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/20 rounded-lg text-blue-500 text-[8px] md:text-[10px] font-black uppercase">Set</button>
                               <button onClick={() => adminAction(stat.name, 'reset')} className="p-1.5 md:p-2 bg-red-600/10 hover:bg-red-600/20 border border-red-500/20 rounded-lg text-red-500 text-[8px] md:text-[10px] font-black uppercase">Reset</button>
+                              <button onClick={() => { if(confirm(`Delete ${stat.name}?`)) adminAction(stat.name, 'delete'); }} className="p-1.5 md:p-2 bg-zinc-600/10 hover:bg-zinc-600/20 border border-zinc-500/20 rounded-lg text-zinc-500 text-[8px] md:text-[10px] font-black uppercase">Del</button>
                             </div>
                           </div>
                         ))}
@@ -1680,19 +1704,23 @@ export default function App() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    <input type="text" value={manualName} onChange={e => setManualName(e.target.value)} placeholder="Player Name" className="w-full bg-black/40 border border-white/10 p-4 rounded-xl outline-none" />
+                    <input type="text" value={manualName} onChange={e => setManualName(e.target.value)} placeholder="Player Name or UID" className="w-full bg-black/40 border border-white/10 p-4 rounded-xl outline-none" />
                     <input type="number" value={manualAmount} onChange={e => setManualAmount(e.target.value)} placeholder="Amount" className="w-full bg-black/40 border border-white/10 p-4 rounded-xl outline-none" />
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-3 gap-2">
                       <button onClick={() => {
                         const amt = parseInt(manualAmount);
                         if (!manualName || isNaN(amt)) return alert("Enter valid name and amount");
                         adminAction(manualName, 'add', amt);
-                      }} className="bg-green-600 p-4 rounded-xl font-black uppercase">Add Chips</button>
+                      }} className="bg-green-600 p-3 rounded-xl font-black uppercase text-[10px]">Add</button>
                       <button onClick={() => {
                         const amt = parseInt(manualAmount);
                         if (!manualName || isNaN(amt)) return alert("Enter valid name and amount");
                         adminAction(manualName, 'set', amt);
-                      }} className="bg-blue-600 p-4 rounded-xl font-black uppercase">Set Chips</button>
+                      }} className="bg-blue-600 p-3 rounded-xl font-black uppercase text-[10px]">Set</button>
+                      <button onClick={() => {
+                        if (!manualName) return alert("Enter player name");
+                        adminAction(manualName, 'set', 1000000000);
+                      }} className="bg-yellow-600 p-3 rounded-xl font-black uppercase text-[10px] text-black">Unlimited</button>
                     </div>
                     <button onClick={() => { if(confirm("Reset ALL players?")) adminAction(null, 'resetAll'); }} className="w-full bg-red-600/20 border border-red-500/50 p-4 rounded-xl font-black uppercase text-red-500">Reset All Players</button>
                   </div>
