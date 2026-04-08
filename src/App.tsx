@@ -185,6 +185,7 @@ export default function App() {
   const [spinResult, setSpinResult] = useState<string | null>(null);
   const [gameNotification, setGameNotification] = useState<string | null>(null);
   const [lastSpinTime, setLastSpinTime] = useState<number>(0);
+  const [lastBonusTime, setLastBonusTime] = useState<number>(0);
   const [soundSettings, setSoundSettings] = useState(soundService.getSettings());
   const [showHowToPlay, setShowHowToPlay] = useState(false);
 
@@ -254,10 +255,11 @@ export default function App() {
   useEffect(() => {
     if (!socket) return;
 
-    socket.on('loginSuccess', (data: { name: string, chips: number, last_spin: number, profilePic?: string, uid?: string }) => {
+    socket.on('loginSuccess', (data: { name: string, chips: number, last_spin: number, last_bonus: number, profilePic?: string, uid?: string }) => {
       setName(data.name);
       setLobbyChips(data.chips);
       setLastSpinTime(data.last_spin);
+      setLastBonusTime(data.last_bonus || 0);
       if (data.profilePic) setProfilePic(data.profilePic);
       if (data.uid) setUid(data.uid);
       setView('lobby');
@@ -314,6 +316,19 @@ export default function App() {
 
     socket.on('spinError', (data: { message: string }) => {
       setIsSpinning(false);
+      alert(data.message);
+    });
+
+    socket.on('bonusResult', (data: { amount: number, chips: number, lastBonus: number }) => {
+      soundService.play('win');
+      setLobbyChips(data.chips);
+      setLastBonusTime(data.lastBonus);
+      setGameNotification(`Collected ${formatChips(data.amount)} Bonus!`);
+      confetti({ particleCount: 100, spread: 50, origin: { y: 0.8 } });
+      setTimeout(() => setGameNotification(null), 3000);
+    });
+
+    socket.on('bonusError', (data: { message: string }) => {
       alert(data.message);
     });
 
@@ -573,6 +588,11 @@ export default function App() {
     socket?.once('spinError', resultHandler);
   };
 
+  const handleCollectBonus = () => {
+    soundService.play('click');
+    socket?.emit('collectBonus', { name });
+  };
+
   const rotatedPlayers = useMemo(() => {
     if (!gameState) return [];
     const players = [...gameState.players];
@@ -716,30 +736,34 @@ export default function App() {
         <header className="relative z-50 p-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 bg-zinc-900/80 backdrop-blur-xl p-2 pr-4 rounded-2xl border border-white/10 shadow-2xl min-w-0 max-w-[60%]">
             <div className="relative group shrink-0 w-12 h-12 md:w-16 md:h-16 flex items-center justify-center">
-              {/* Frame Image */}
-              <img 
-                src="https://i.imgur.com/rHDNmdU.png" 
-                alt="Frame" 
-                className="absolute inset-0 w-full h-full z-20 pointer-events-none object-contain" 
-                referrerPolicy="no-referrer"
-              />
-              
-              <div className="w-[75%] h-[75%] bg-gradient-to-br from-red-600 to-red-900 rounded-full flex items-center justify-center shadow-lg overflow-hidden relative z-10">
+              {/* Profile Picture (Bottom Layer) */}
+              <div className="w-[85%] h-[85%] bg-gradient-to-br from-red-600 to-red-900 rounded-full flex items-center justify-center shadow-lg overflow-hidden relative z-10">
                 {profilePic ? (
                   <img src={profilePic} alt="Profile" className="w-full h-full object-cover" />
                 ) : (
                   <User className="w-6 h-6 md:w-7 md:h-7 text-white/50" />
                 )}
+                {/* Upload Overlay */}
                 <label className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer transition-opacity z-30">
                   <Camera className="w-4 h-4 text-white" />
                   <input type="file" accept="image/*" className="hidden" onChange={handleProfilePicUpload} />
                 </label>
               </div>
+
+              {/* Frame Image (Top Layer) */}
+              <img 
+                src="https://i.imgur.com/rHDNmdU.png" 
+                alt="Frame" 
+                className="absolute inset-0 w-full h-full z-20 pointer-events-none object-contain scale-110" 
+                referrerPolicy="no-referrer"
+              />
+              
               <div className="absolute bottom-1 right-1 w-3 h-3 bg-emerald-500 border-2 border-[#0a0a0a] rounded-full z-30" />
             </div>
             <div className="flex flex-col min-w-0 overflow-hidden">
               <span className="text-xs md:text-sm font-black text-white uppercase tracking-tight truncate">{name}</span>
-              <div className="flex items-center gap-1">
+              <span className="text-[8px] text-white/40 font-bold uppercase tracking-widest truncate">UID: {uid || 'Loading...'}</span>
+              <div className="flex items-center gap-1 mt-0.5">
                 <Coins className="w-3 h-3 text-yellow-500 shrink-0" />
                 <span className="text-[10px] md:text-xs font-black text-yellow-500 truncate">{formatChips(lobbyChips)}</span>
               </div>
@@ -900,6 +924,19 @@ export default function App() {
               <img src="https://i.imgur.com/IncdBH7.png" alt="How to Play" className="w-full h-full object-cover" />
             </div>
             <span className="text-[8px] font-black uppercase tracking-widest text-white/40 group-hover:text-white">How to Play</span>
+          </button>
+        </div>
+
+        {/* Daily Bonus Button */}
+        <div className="absolute bottom-6 left-24 md:left-28 z-50">
+          <button 
+            onClick={handleCollectBonus}
+            className="group relative flex flex-col items-center gap-1 transition-transform active:scale-95"
+          >
+            <div className="w-12 h-12 md:w-16 md:h-16 rounded-xl overflow-hidden border border-white/10 shadow-2xl group-hover:border-yellow-500/50 transition-all bg-black/40 p-2">
+              <img src="https://i.imgur.com/62odWX1.png" alt="Daily Bonus" className="w-full h-full object-contain group-hover:scale-110 transition-transform" />
+            </div>
+            <span className="text-[8px] font-black uppercase tracking-widest text-white/40 group-hover:text-yellow-500">Daily Bonus</span>
           </button>
         </div>
 
