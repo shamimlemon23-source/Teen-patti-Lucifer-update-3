@@ -30,7 +30,8 @@ import {
   writeBatch,
   initializeFirestore,
   getDocFromServer,
-  deleteDoc
+  deleteDoc,
+  where
 } from 'firebase/firestore';
 
 dotenv.config();
@@ -139,7 +140,11 @@ try {
   console.error("Error during Firebase initialization:", e);
 }
 
-const getPlayerChips = async (name: string, password?: string, ignorePassword = false): Promise<{ chips: number, last_spin: number, profilePic?: string, error?: string }> => {
+const generateUID = () => {
+  return Math.random().toString(36).substring(2, 10).toUpperCase();
+};
+
+const getPlayerChips = async (name: string, password?: string, ignorePassword = false): Promise<{ chips: number, last_spin: number, profilePic?: string, uid?: string, error?: string }> => {
   if (!db) {
     const projectId = firebaseConfig?.projectId || process.env.FIREBASE_PROJECT_ID;
     const apiKey = firebaseConfig?.apiKey || process.env.FIREBASE_API_KEY;
@@ -159,34 +164,43 @@ const getPlayerChips = async (name: string, password?: string, ignorePassword = 
       
       // If ignorePassword is true, we are doing an internal update (like spin or admin)
       if (ignorePassword) {
-        return { chips: (data.chips !== undefined) ? Number(data.chips) : 50000, last_spin: data.last_spin || 0, profilePic: data.profilePic };
+        return { chips: (data.chips !== undefined) ? Number(data.chips) : 50000, last_spin: data.last_spin || 0, profilePic: data.profilePic, uid: data.uid };
       }
-
+ 
       // If the account HAS a password, we MUST verify it.
       if (data.password && String(data.password).trim() !== "") {
         const storedPass = String(data.password).trim();
         const providedPass = (password && typeof password === 'string') ? password.trim() : "";
         
         if (providedPass === "" || storedPass !== providedPass) {
-          return { chips: 0, last_spin: 0, error: 'Incorrect password for this name!' };
+          return { chips: 0, last_spin: 0, error: 'Username already exists. Choose a different name.' };
         }
       } else if (password && typeof password === 'string' && password.trim() !== "") {
         // If the account has NO password, but the user provided one, SET it now (claiming the account)
         await updateDoc(playerRef, { password: password.trim() });
       }
       
-      return { chips: (data.chips !== undefined) ? Number(data.chips) : 50000, last_spin: data.last_spin || 0, profilePic: data.profilePic };
+      // Ensure existing players get a UID if they don't have one
+      if (!data.uid) {
+        const newUid = generateUID();
+        await updateDoc(playerRef, { uid: newUid });
+        data.uid = newUid;
+      }
+      
+      return { chips: (data.chips !== undefined) ? Number(data.chips) : 50000, last_spin: data.last_spin || 0, profilePic: data.profilePic, uid: data.uid };
     }
     
     const initialChips = 50000;
+    const newUid = generateUID();
     const newData = {
       name: safeName,
+      uid: newUid,
       chips: initialChips,
       last_spin: 0,
       password: (password && password.trim() !== "") ? password.trim() : ''
     };
     await setDoc(playerRef, newData);
-    return { chips: initialChips, last_spin: 0 };
+    return { chips: initialChips, last_spin: 0, uid: newUid };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error('Firestore Error in getPlayerChips:', error);
@@ -505,7 +519,7 @@ async function startServer() {
           socket.emit("error", dbData.error);
           return;
         }
-        socket.emit("loginSuccess", { name, chips: dbData.chips, last_spin: dbData.last_spin, profilePic: dbData.profilePic });
+        socket.emit("loginSuccess", { name, chips: dbData.chips, last_spin: dbData.last_spin, profilePic: dbData.profilePic, uid: dbData.uid });
       } catch (error) {
         console.error("Login error:", error);
         socket.emit("error", "Login failed. Please try again.");
@@ -995,44 +1009,59 @@ async function startServer() {
           return;
         }
 
-        const playerRef = doc(db, 'players', target.toLowerCase().trim());
         try {
+          // Find player by name or UID
+          let playerRef = null;
+          let playerName = "";
+
+          // First try as name (doc ID)
+          const nameRef = doc(db, 'players', target.toLowerCase().trim());
+          const nameSnap = await getDoc(nameRef);
+          
+          if (nameSnap.exists()) {
+            playerRef = nameRef;
+            playerName = nameSnap.data().name;
+          } else {
+            // Try as UID
+            const q = query(collection(db, 'players'), where('uid', '==', target.toUpperCase()));
+            const uidSnap = await getDocs(q);
+            if (!uidSnap.empty) {
+              playerRef = doc(db, 'players', uidSnap.docs[0].id);
+              playerName = uidSnap.docs[0].data().name;
+            }
+          }
+
+          if (!playerRef) {
+            socket.emit("adminMessage", `Player ${target} not found (tried Name and UID)`);
+            return;
+          }
+
           const snap = await getDoc(playerRef);
           
           if (type === "add") {
             const add = Number(amount) || 0;
-            if (snap.exists()) {
-              const currentChips = Number((snap.data() as any).chips) || 0;
-              const newChips = currentChips + add;
-              await updateDoc(playerRef, { chips: newChips });
-            } else {
-              await setDoc(playerRef, { name: target.toLowerCase().trim(), chips: add, last_spin: 0, password: '' });
-            }
+            const currentChips = Number((snap.data() as any).chips) || 0;
+            const newChips = currentChips + add;
+            await updateDoc(playerRef, { chips: newChips });
           } else if (type === "reset") {
             await updateDoc(playerRef, { chips: 50000 });
           } else if (type === "set") {
             const setVal = Number(amount) || 0;
-            if (snap.exists()) {
-              await updateDoc(playerRef, { chips: setVal });
-            } else {
-              await setDoc(playerRef, { name: target.toLowerCase().trim(), chips: setVal, last_spin: 0, password: '' });
-            }
+            await updateDoc(playerRef, { chips: setVal });
           } else if (type === "delete") {
-            if (snap.exists()) {
-              await deleteDoc(playerRef);
-            }
+            await deleteDoc(playerRef);
           }
 
           // Update active players in rooms
           const updatedSnap = await getDoc(playerRef);
           if (updatedSnap.exists()) {
             const updatedChips = Number((updatedSnap.data() as any).chips);
-            const safeTarget = target.toLowerCase().trim();
-            Object.keys(rooms).forEach(r => {
-              const p = rooms[r].players.find((pl: any) => pl.name.toLowerCase().trim() === safeTarget);
+            const safeTarget = playerName.toLowerCase().trim();
+            Object.keys(rooms).forEach(rid => {
+              const p = rooms[rid].players.find((pl: any) => pl.name.toLowerCase().trim() === safeTarget);
               if (p) {
                 p.chips = updatedChips;
-                emitGameState(r);
+                emitGameState(rid);
                 const targetSocket = io.sockets.sockets.get(p.id);
                 if (targetSocket) targetSocket.emit("chipsUpdated", updatedChips);
               }
@@ -1047,7 +1076,7 @@ async function startServer() {
           }
           
           await refreshAdminStats();
-          socket.emit("adminMessage", `Action ${type} successful for ${target}`);
+          socket.emit("adminMessage", `Action ${type} successful for ${playerName}`);
         } catch (error) {
           console.error('Admin Action Error:', error);
           const errorMsg = error instanceof Error ? error.message : 'Unknown error';
