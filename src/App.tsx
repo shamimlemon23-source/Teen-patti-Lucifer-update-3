@@ -338,6 +338,18 @@ export default function App() {
       setLeaderboardData(data);
     });
 
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && socket?.connected) {
+        // Request fresh state if we were away
+        const currentRoom = localStorage.getItem('lastRoomId');
+        if (currentRoom) {
+          socket.emit('joinRoom', { roomId: currentRoom, name });
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
       socket.off('loginSuccess');
       socket.off('chipsUpdated');
@@ -350,6 +362,7 @@ export default function App() {
       socket.off('sideShowPrompt');
       socket.off('spinResult');
       socket.off('spinError');
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [socket]);
 
@@ -1446,7 +1459,10 @@ export default function App() {
                     y -= isMobile ? 10 : 8;
                     if (Math.abs(x) < 15) x = x < 0 ? -28 : 28;
                   }
-                  if (y > 10) y += isMobile ? 12 : 8;
+                  if (y > 10) {
+                    // Move bottom seats UP to avoid overlap with "Your Balance"
+                    y -= isMobile ? 6 : 8; 
+                  }
                 }
 
                 const isCurrent = gameState?.currentTurn === originalIdx;
