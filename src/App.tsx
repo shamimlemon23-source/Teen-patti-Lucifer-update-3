@@ -195,6 +195,7 @@ export default function App() {
   const [showHowToPlay, setShowHowToPlay] = useState(false);
   const [chatMessages, setChatMessages] = useState<{sender: string, message: string, timestamp: string}[]>([]);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [chatInput, setChatInput] = useState('');
   const chatEndRef = React.useRef<HTMLDivElement>(null);
 
@@ -347,6 +348,14 @@ export default function App() {
 
     socket.on('chatMessage', (msg: {sender: string, message: string, timestamp: string}) => {
       setChatMessages(prev => [...prev.slice(-49), msg]);
+      
+      // Play sound and update unread count if chat is closed or message is from someone else
+      if (msg.sender !== localStorage.getItem('lucifer_poker_name')) {
+        soundService.play('chat');
+        if (!isChatOpen) {
+          setUnreadCount(prev => prev + 1);
+        }
+      }
     });
 
     const handleVisibilityChange = () => {
@@ -457,6 +466,12 @@ export default function App() {
     soundService.play('click');
     socket?.emit('login', { name, password });
   };
+
+  useEffect(() => {
+    if (isChatOpen) {
+      setUnreadCount(0);
+    }
+  }, [isChatOpen]);
 
   useEffect(() => {
     if (chatEndRef.current) {
@@ -1856,7 +1871,7 @@ export default function App() {
 
       {/* Chat System */}
       {view === 'game' && (
-        <div className="fixed bottom-4 right-4 z-[60] flex flex-col items-end gap-2">
+        <div className="fixed bottom-24 md:bottom-32 right-4 z-[60] flex flex-col items-end gap-2">
           <AnimatePresence>
             {isChatOpen && (
               <motion.div
@@ -1922,6 +1937,16 @@ export default function App() {
             >
               <div className="absolute inset-0 bg-gradient-to-br from-red-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
               <img src="https://i.imgur.com/A2TTBTM.png" alt="Chat" className="w-8 h-8 md:w-12 md:h-12 object-contain relative z-10" />
+              
+              {unreadCount > 0 && !isChatOpen && (
+                <motion.div 
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  className="absolute -top-1 -right-1 bg-red-600 text-white text-[10px] md:text-xs font-black w-5 h-5 md:w-7 md:h-7 rounded-full flex items-center justify-center shadow-lg z-20 border-2 border-zinc-950"
+                >
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </motion.div>
+              )}
             </button>
             <span className="text-[8px] md:text-[10px] font-black uppercase tracking-[0.2em] text-white/40">Live Chat</span>
           </div>
