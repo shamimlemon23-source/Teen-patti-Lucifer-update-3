@@ -84,6 +84,24 @@ const SUIT_COLORS: Record<Suit, string> = {
   spades: 'text-slate-900'
 };
 
+// --- Utilities ---
+const formatChips = (amount: number): string => {
+  if (!isFinite(amount) || amount === null || amount === undefined) return '0';
+  if (amount >= 1e12) {
+    return (amount / 1e12).toLocaleString(undefined, { maximumFractionDigits: 2 }) + ' trillion';
+  }
+  if (amount >= 1e9) {
+    return (amount / 1e9).toFixed(1).replace(/\.0$/, '') + 'B';
+  }
+  if (amount >= 1e6) {
+    return (amount / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+  }
+  if (amount >= 1e3) {
+    return (amount / 1e3).toFixed(1).replace(/\.0$/, '') + 'k';
+  }
+  return amount.toString();
+};
+
 // --- Components ---
 
 interface CardComponentProps {
@@ -167,6 +185,7 @@ export default function App() {
   const [gameNotification, setGameNotification] = useState<string | null>(null);
   const [lastSpinTime, setLastSpinTime] = useState<number>(0);
   const [soundSettings, setSoundSettings] = useState(soundService.getSettings());
+  const [showHowToPlay, setShowHowToPlay] = useState(false);
 
   const isAdmin = useMemo(() => name.trim().toUpperCase() === 'LUCIFER_ADMIN_777', [name]);
 
@@ -485,7 +504,7 @@ export default function App() {
       const totalBet = currentPlayer?.isBlind ? newLastBet : newLastBet * 2;
       
       if (currentPlayer && currentPlayer.chips < totalBet) {
-        alert(`Not enough chips! You need ${totalBet.toLocaleString()} $(USD) for this raise.`);
+        alert(`Not enough chips! You need ${formatChips(totalBet)} $(USD) for this raise.`);
         return;
       }
       takeAction('raise', raiseAmount);
@@ -588,27 +607,18 @@ export default function App() {
   const toggleFullscreen = () => {
     soundService.play('click');
     try {
-      if (!document.fullscreenElement) {
-        const elem = document.documentElement;
-        if (elem.requestFullscreen) {
-          elem.requestFullscreen();
-        } else if ((elem as any).webkitRequestFullscreen) {
-          (elem as any).webkitRequestFullscreen();
-        } else if ((elem as any).msRequestFullscreen) {
-          (elem as any).msRequestFullscreen();
-        }
+      const doc = window.document as any;
+      const elem = doc.documentElement;
+
+      if (!doc.fullscreenElement && !doc.webkitFullscreenElement && !doc.mozFullScreenElement && !doc.msFullscreenElement) {
+        const request = elem.requestFullscreen || elem.webkitRequestFullscreen || elem.mozRequestFullScreen || elem.msRequestFullscreen;
+        if (request) request.call(elem);
       } else {
-        if (document.exitFullscreen) {
-          document.exitFullscreen();
-        } else if ((document as any).webkitExitFullscreen) {
-          (document as any).webkitExitFullscreen();
-        } else if ((document as any).msExitFullscreen) {
-          (document as any).msExitFullscreen();
-        }
+        const exit = doc.exitFullscreen || doc.webkitExitFullscreen || doc.mozCancelFullScreen || doc.msExitFullscreen;
+        if (exit) exit.call(doc);
       }
     } catch (err) {
       console.error("Fullscreen error:", err);
-      alert("Fullscreen is not supported on this device/browser.");
     }
   };
 
@@ -717,7 +727,7 @@ export default function App() {
               <span className="text-xs md:text-sm font-black text-white uppercase tracking-tight truncate">{name}</span>
               <div className="flex items-center gap-1">
                 <Coins className="w-3 h-3 text-yellow-500 shrink-0" />
-                <span className="text-[10px] md:text-xs font-black text-yellow-500 truncate">{lobbyChips.toLocaleString()}</span>
+                <span className="text-[10px] md:text-xs font-black text-yellow-500 truncate">{formatChips(lobbyChips)}</span>
               </div>
             </div>
           </div>
@@ -885,7 +895,49 @@ export default function App() {
            </button>
         </footer>
 
+        {/* How to Play Button */}
+        <div className="absolute bottom-6 left-6 z-50">
+          <button 
+            onClick={() => setShowHowToPlay(true)}
+            className="group relative flex flex-col items-center gap-1 transition-transform active:scale-95"
+          >
+            <div className="w-12 h-12 md:w-16 md:h-16 rounded-xl overflow-hidden border border-white/10 shadow-2xl group-hover:border-yellow-500/50 transition-all">
+              <img src="https://i.imgur.com/IncdBH7.png" alt="How to Play" className="w-full h-full object-cover" />
+            </div>
+            <span className="text-[8px] font-black uppercase tracking-widest text-white/40 group-hover:text-white">How to Play</span>
+          </button>
+        </div>
+
         {/* Modals available in Lobby */}
+        <AnimatePresence>
+          {showHowToPlay && (
+            <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowHowToPlay(false)} className="absolute inset-0 bg-black/90 backdrop-blur-md" />
+              <motion.div 
+                initial={{ scale: 0.9, opacity: 0, y: 20 }} 
+                animate={{ scale: 1, opacity: 1, y: 0 }} 
+                exit={{ scale: 0.9, opacity: 0, y: 20 }} 
+                className="relative w-full max-w-4xl max-h-[90vh] bg-zinc-900 border border-white/10 rounded-3xl overflow-hidden shadow-2xl flex flex-col"
+              >
+                <div className="p-4 border-b border-white/5 flex items-center justify-between bg-black/20">
+                  <h2 className="text-xl font-black uppercase tracking-tighter text-yellow-500">How to Play</h2>
+                  <button onClick={() => setShowHowToPlay(false)} className="p-2 hover:bg-white/5 rounded-xl transition-colors">
+                    <LogOut className="w-5 h-5 text-white/40" />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-2 md:p-4 custom-scrollbar">
+                  <img 
+                    src="https://i.imgur.com/fpPwhJk.png" 
+                    alt="Instructions" 
+                    className="w-full h-auto rounded-xl" 
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
         <AnimatePresence>
           {showAdminPanel && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -923,7 +975,7 @@ export default function App() {
                             <div className="flex items-center gap-2">
                               <div className="flex items-center gap-1 text-yellow-500 font-black text-xs mr-4">
                                 <Coins className="w-3 h-3 md:w-4 md:h-4" />
-                                {isFinite(Number(stat.chips)) ? Number(stat.chips).toLocaleString() : '0'} $(USD)
+                                {isFinite(Number(stat.chips)) ? formatChips(Number(stat.chips)) : '0'} $(USD)
                               </div>
                               <button onClick={() => handleAdminAdd(stat.name)} className="p-1.5 md:p-2 bg-green-600/10 hover:bg-green-600/20 border border-green-500/20 rounded-lg text-green-500 text-[8px] md:text-[10px] font-black uppercase">Add</button>
                               <button onClick={() => handleAdminSet(stat.name)} className="p-1.5 md:p-2 bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/20 rounded-lg text-blue-500 text-[8px] md:text-[10px] font-black uppercase">Set</button>
@@ -1299,15 +1351,15 @@ export default function App() {
                   className="bg-zinc-950/90 backdrop-blur-3xl border-2 border-red-600/40 px-6 md:px-12 py-3 md:py-8 rounded-[2rem] md:rounded-[3rem] shadow-[0_0_80px_rgba(0,0,0,0.9)] flex flex-col items-center min-w-[160px] md:min-w-[280px]"
                 >
                   <span className="text-[8px] md:text-[12px] font-black uppercase tracking-[0.5em] text-red-500 mb-1 md:mb-2">Pot Value</span>
-                  <div className="flex items-center gap-2 md:gap-4 text-2xl md:text-6xl font-black text-white drop-shadow-[0_4px_20px_rgba(0,0,0,0.8)]">
-                    <Coins className="w-5 h-5 md:w-12 md:h-12 text-yellow-500" />
-                    {gameState?.pot.toLocaleString() || 0} <span className="text-xs md:text-2xl ml-1 md:ml-2 text-white/60">$(USD)</span>
-                  </div>
-                  <div className="mt-2 md:mt-4 text-[8px] md:text-sm font-black text-white/40 uppercase tracking-[0.2em] flex items-center gap-2 md:gap-4">
-                    <span>Bet: {gameState?.lastBet.toLocaleString() || 0} $(USD)</span>
-                    <span className="w-1 h-1 bg-white/20 rounded-full" />
-                    <span>Round: {gameState?.roundCount || 0}/5</span>
-                  </div>
+            <div className="flex items-center gap-2 md:gap-4 text-2xl md:text-6xl font-black text-white drop-shadow-[0_4px_20px_rgba(0,0,0,0.8)]">
+              <Coins className="w-5 h-5 md:w-12 md:h-12 text-yellow-500" />
+              {formatChips(gameState?.pot || 0)} <span className="text-xs md:text-2xl ml-1 md:ml-2 text-white/60">$(USD)</span>
+            </div>
+            <div className="mt-2 md:mt-4 text-[8px] md:text-sm font-black text-white/40 uppercase tracking-[0.2em] flex items-center gap-2 md:gap-4">
+              <span>Bet: {formatChips(gameState?.lastBet || 0)} $(USD)</span>
+              <span className="w-1 h-1 bg-white/20 rounded-full" />
+              <span>Round: {gameState?.roundCount || 0}/5</span>
+            </div>
                 </motion.div>
                 
                 {gameState?.winner && (
@@ -1358,7 +1410,12 @@ export default function App() {
                     {!isTopHalf && (
                       <div className="flex -space-x-6 md:-space-x-14 mb-2 scale-[0.6] md:scale-[1.1] origin-bottom">
                         {player.hand.map((card: Card, cIdx: number) => (
-                          <CardComponent key={`${player.id}-${cIdx}`} card={card} hidden={isMe ? player.isBlind : !gameState?.winner} index={cIdx} />
+                          <CardComponent 
+                            key={`${player.id}-${cIdx}`} 
+                            card={card} 
+                            hidden={isMe ? player.isBlind : (!gameState?.winner || player.isFolded)} 
+                            index={cIdx} 
+                          />
                         ))}
                       </div>
                     )}
@@ -1388,7 +1445,7 @@ export default function App() {
                           {player.chips === -1 ? (
                             <span className="text-red-500/80 animate-pulse text-[7px] md:text-xs">HIDDEN</span>
                           ) : (
-                            player.chips.toLocaleString()
+                            formatChips(player.chips)
                           )} <span className="text-[7px] md:text-xs opacity-60">$(USD)</span>
                         </div>
                       </div>
@@ -1396,7 +1453,12 @@ export default function App() {
                     {isTopHalf && (
                       <div className="flex -space-x-6 md:-space-x-14 mt-2 scale-[0.6] md:scale-[1.1] origin-top">
                         {player.hand.map((card: Card, cIdx: number) => (
-                          <CardComponent key={`${player.id}-${cIdx}`} card={card} hidden={isMe ? player.isBlind : !gameState?.winner} index={cIdx} />
+                          <CardComponent 
+                            key={`${player.id}-${cIdx}`} 
+                            card={card} 
+                            hidden={isMe ? player.isBlind : (!gameState?.winner || player.isFolded)} 
+                            index={cIdx} 
+                          />
                         ))}
                       </div>
                     )}
@@ -1414,7 +1476,7 @@ export default function App() {
                   <span className="text-[8px] md:text-[10px] font-black uppercase tracking-[0.3em] text-white/30">Your Balance</span>
                   <div className="flex items-center gap-2">
                     <Coins className="w-3 h-3 md:w-6 md:h-6 text-yellow-500" />
-                    <span className="text-xs md:text-2xl font-black tracking-tighter text-white">{currentPlayer?.chips.toLocaleString() || 0} <span className="text-[8px] md:text-sm text-white/40 ml-1">$(USD)</span></span>
+                    <span className="text-xs md:text-2xl font-black tracking-tighter text-white">{formatChips(currentPlayer?.chips || 0)} <span className="text-[8px] md:text-sm text-white/40 ml-1">$(USD)</span></span>
                   </div>
                 </div>
                 {timeLeft !== null && isMyTurn && (
@@ -1441,7 +1503,7 @@ export default function App() {
                       <button onClick={() => takeAction('chaal')} className={`bg-red-600 text-white font-black px-4 md:px-12 py-2 md:py-4 uppercase tracking-widest ${gameState?.type === 'PLAY_NOW' ? 'w-full' : 'min-w-[80px] md:min-w-[180px]'} hover:bg-red-500 transition-all active:scale-95 border-r border-red-400/20`}>
                         <div className="flex flex-col items-center">
                           <span className="text-[7px] md:text-[10px] font-black text-white/60 leading-none mb-0.5 md:mb-1">CHAAL</span>
-                          <span className="text-xs md:text-2xl leading-none">{(currentPlayer?.isBlind ? gameState?.lastBet : (gameState?.lastBet || 0) * 2)?.toLocaleString()} <span className="text-[8px] md:text-xs opacity-60">$(USD)</span></span>
+                          <span className="text-xs md:text-2xl leading-none">{formatChips(currentPlayer?.isBlind ? (gameState?.lastBet || 0) : (gameState?.lastBet || 0) * 2)} <span className="text-[8px] md:text-xs opacity-60">$(USD)</span></span>
                         </div>
                       </button>
                       {gameState?.type === 'PLAY_NOW' ? (
@@ -1568,7 +1630,7 @@ export default function App() {
                             <div className="flex items-center gap-2 md:gap-4">
                               <div className="flex items-center gap-1 md:gap-2 text-yellow-500 font-black text-[10px] md:text-base">
                                 <Coins className="w-3 h-3 md:w-4 md:h-4" />
-                                {isFinite(Number(stat.chips)) ? Number(stat.chips).toLocaleString() : '0'} $(USD)
+                                {isFinite(Number(stat.chips)) ? formatChips(Number(stat.chips)) : '0'} $(USD)
                               </div>
                               <button onClick={() => handleAdminAdd(stat.name)} className="p-1.5 md:p-2 bg-green-600/10 hover:bg-green-600/20 border border-green-500/20 rounded-lg text-green-500 text-[8px] md:text-[10px] font-black uppercase">Add</button>
                               <button onClick={() => handleAdminSet(stat.name)} className="p-1.5 md:p-2 bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/20 rounded-lg text-blue-500 text-[8px] md:text-[10px] font-black uppercase">Set</button>
