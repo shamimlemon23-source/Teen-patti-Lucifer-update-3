@@ -294,12 +294,28 @@ async function startServer() {
 
   // Cleanup: Delete LUCIFER_DEV_777 if it exists
   if (db) {
-    const devRef = doc(db, 'players', 'lucifer_dev_777');
-    getDoc(devRef).then(snap => {
-      if (snap.exists()) {
-        deleteDoc(devRef).then(() => console.log("Deleted LUCIFER_DEV_777 account.")).catch(e => console.error("Error deleting dev account:", e));
+    const cleanupDev = async () => {
+      try {
+        // Try deleting by doc ID
+        const devRef = doc(db, 'players', 'lucifer_dev_777');
+        const snap = await getDoc(devRef);
+        if (snap.exists()) {
+          await deleteDoc(devRef);
+          console.log("Deleted LUCIFER_DEV_777 account (doc ID).");
+        }
+        
+        // Also try searching by name field exactly
+        const q = query(collection(db, 'players'), where('name', '==', 'LUCIFER_DEV_777'));
+        const qSnap = await getDocs(q);
+        for (const d of qSnap.docs) {
+          await deleteDoc(doc(db, 'players', d.id));
+          console.log(`Deleted LUCIFER_DEV_777 account (name match: ${d.id}).`);
+        }
+      } catch (e) {
+        console.error("Error during dev account cleanup:", e);
       }
-    });
+    };
+    cleanupDev();
   }
 
   const ROOM_TYPES = {
@@ -1260,6 +1276,23 @@ async function startServer() {
         console.error("Bonus error:", error);
         socket.emit("bonusError", { message: "Failed to collect bonus. Try again." });
       }
+    });
+
+    socket.on("chatMessage", ({ roomId, message }) => {
+      const rid = roomId?.trim().toLowerCase();
+      if (!rid || !message) return;
+      
+      const game = rooms[rid];
+      if (!game) return;
+      
+      const player = game.players.find((p: any) => p.id === socket.id);
+      if (!player) return;
+
+      io.to(rid).emit("chatMessage", {
+        sender: player.name,
+        message: message.substring(0, 200),
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      });
     });
 
     socket.on("getLeaderboard", async () => {
