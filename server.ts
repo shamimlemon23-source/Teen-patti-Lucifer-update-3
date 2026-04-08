@@ -1077,7 +1077,13 @@ async function startServer() {
           }
           
           await refreshAdminStats();
-          socket.emit("adminMessage", `Action ${type} successful for ${playerName}`);
+          let msg = `Action ${type} successful for ${playerName}`;
+          if (type === 'add') msg = `Chips Successfully Added to ${playerName}`;
+          if (type === 'reset') msg = `Chips Successfully Reset for ${playerName}`;
+          if (type === 'set') msg = `Chips Successfully Set for ${playerName}`;
+          if (type === 'delete') msg = `Player ${playerName} Successfully Deleted`;
+          
+          socket.emit("adminMessage", msg);
         } catch (error) {
           console.error('Admin Action Error:', error);
           const errorMsg = error instanceof Error ? error.message : 'Unknown error';
@@ -1176,6 +1182,23 @@ async function startServer() {
       } catch (error) {
         console.error("Bonus error:", error);
         socket.emit("bonusError", { message: "Failed to collect bonus. Try again." });
+      }
+    });
+
+    socket.on("getLeaderboard", async () => {
+      try {
+        if (!db) return;
+        const q = query(collection(db, 'players'), orderBy('chips', 'desc'), limit(20));
+        const snap = await getDocs(q);
+        const leaderboard = snap.docs.map(d => ({
+          name: d.data().name,
+          chips: d.data().chips,
+          profilePic: d.data().profilePic,
+          uid: d.data().uid
+        }));
+        socket.emit("leaderboardData", leaderboard);
+      } catch (error) {
+        console.error("Leaderboard error:", error);
       }
     });
   });
