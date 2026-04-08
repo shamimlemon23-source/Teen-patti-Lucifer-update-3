@@ -25,7 +25,10 @@ import {
   Music,
   CreditCard,
   Camera,
-  Search
+  Search,
+  MessageCircle,
+  X,
+  Send
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { soundService } from './services/soundService.js';
@@ -190,6 +193,10 @@ export default function App() {
   const [leaderboardData, setLeaderboardData] = useState<any[]>([]);
   const [soundSettings, setSoundSettings] = useState(soundService.getSettings());
   const [showHowToPlay, setShowHowToPlay] = useState(false);
+  const [chatMessages, setChatMessages] = useState<{sender: string, message: string, timestamp: string}[]>([]);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatInput, setChatInput] = useState('');
+  const chatEndRef = React.useRef<HTMLDivElement>(null);
 
   const isAdmin = useMemo(() => name.trim().toUpperCase() === 'LUCIFER_ADMIN_777', [name]);
 
@@ -338,6 +345,10 @@ export default function App() {
       setLeaderboardData(data);
     });
 
+    socket.on('chatMessage', (msg: {sender: string, message: string, timestamp: string}) => {
+      setChatMessages(prev => [...prev.slice(-49), msg]);
+    });
+
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible' && socket?.connected) {
         // Request fresh state if we were away
@@ -362,6 +373,7 @@ export default function App() {
       socket.off('sideShowPrompt');
       socket.off('spinResult');
       socket.off('spinError');
+      socket.off('chatMessage');
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [socket]);
@@ -447,6 +459,12 @@ export default function App() {
   };
 
   useEffect(() => {
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatMessages]);
+
+  useEffect(() => {
     if (view !== 'game' && joined && socket && roomId) {
       socket.emit('leaveRoom', roomId);
       setJoined(false);
@@ -454,11 +472,18 @@ export default function App() {
     }
   }, [view, joined, socket, roomId]);
 
+  const sendChatMessage = () => {
+    if (!chatInput.trim() || !socket || !roomId) return;
+    socket.emit('chatMessage', { roomId, message: chatInput });
+    setChatInput('');
+  };
+
   const logout = () => {
     soundService.play('click');
     setJoined(false);
     setView('lobby');
     setGameState(null);
+    setChatMessages([]);
     if (socket && roomId) {
       socket.emit('leaveRoom', roomId);
     }
@@ -473,6 +498,7 @@ export default function App() {
     setJoined(false);
     setView('login');
     setGameState(null);
+    setChatMessages([]);
     localStorage.removeItem('lucifer_poker_name');
   };
   const startGame = () => {
@@ -1827,6 +1853,80 @@ export default function App() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Chat System */}
+      {view === 'game' && (
+        <div className="fixed bottom-4 right-4 z-[60] flex flex-col items-end gap-2">
+          <AnimatePresence>
+            {isChatOpen && (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                className="bg-zinc-950/95 backdrop-blur-3xl border border-white/10 w-72 md:w-96 h-[400px] rounded-3xl shadow-2xl flex flex-col overflow-hidden mb-2"
+              >
+                <div className="p-4 border-b border-white/10 flex items-center justify-between bg-white/5">
+                  <div className="flex items-center gap-2">
+                    <MessageCircle className="w-5 h-5 text-red-500" />
+                    <span className="font-black text-sm uppercase tracking-widest text-white">Live Chat</span>
+                  </div>
+                  <button onClick={() => setIsChatOpen(false)} className="text-white/40 hover:text-white">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-hide">
+                  {chatMessages.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-white/20 gap-2">
+                      <MessageCircle className="w-12 h-12" />
+                      <span className="text-xs font-bold uppercase tracking-widest">No messages yet</span>
+                    </div>
+                  ) : (
+                    chatMessages.map((msg, i) => (
+                      <div key={i} className={`flex flex-col ${msg.sender === name ? 'items-end' : 'items-start'}`}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[10px] font-bold text-white/40">{msg.sender}</span>
+                          <span className="text-[8px] text-white/20">{msg.timestamp}</span>
+                        </div>
+                        <div className={`px-3 py-2 rounded-2xl text-sm max-w-[85%] break-words ${msg.sender === name ? 'bg-red-600 text-white rounded-tr-none' : 'bg-white/10 text-white rounded-tl-none'}`}>
+                          {msg.message}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                  <div ref={chatEndRef} />
+                </div>
+
+                <div className="p-4 bg-black/40 border-t border-white/10">
+                  <form onSubmit={(e) => { e.preventDefault(); sendChatMessage(); }} className="flex gap-2">
+                    <input
+                      type="text"
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      placeholder="Type a message..."
+                      className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-red-500/50"
+                    />
+                    <button type="submit" className="bg-red-600 p-2 rounded-xl hover:bg-red-500 transition-all">
+                      <Send className="w-5 h-5 text-white" />
+                    </button>
+                  </form>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <div className="flex flex-col items-center gap-1">
+            <button
+              onClick={() => setIsChatOpen(!isChatOpen)}
+              className="w-14 h-14 md:w-20 md:h-20 bg-zinc-950/90 backdrop-blur-2xl border-2 border-white/10 rounded-2xl md:rounded-3xl flex items-center justify-center hover:scale-110 transition-all active:scale-95 shadow-2xl group relative overflow-hidden"
+            >
+              <div className="absolute inset-0 bg-gradient-to-br from-red-500/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+              <img src="https://i.imgur.com/A2TTBTM.png" alt="Chat" className="w-8 h-8 md:w-12 md:h-12 object-contain relative z-10" />
+            </button>
+            <span className="text-[8px] md:text-[10px] font-black uppercase tracking-[0.2em] text-white/40">Live Chat</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
