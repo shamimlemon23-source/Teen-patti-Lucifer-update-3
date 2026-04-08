@@ -167,6 +167,7 @@ export default function App() {
   const [view, setView] = useState<'splash' | 'login' | 'lobby' | 'game'>('splash');
   const [isConnected, setIsConnected] = useState(false);
   const [profilePic, setProfilePic] = useState<string | null>(null);
+  const [uid, setUid] = useState<string | null>(null);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [adminTab, setAdminTab] = useState<'players' | 'manual'>('players');
   const [manualName, setManualName] = useState('');
@@ -253,11 +254,12 @@ export default function App() {
   useEffect(() => {
     if (!socket) return;
 
-    socket.on('loginSuccess', (data: { name: string, chips: number, last_spin: number, profilePic?: string }) => {
+    socket.on('loginSuccess', (data: { name: string, chips: number, last_spin: number, profilePic?: string, uid?: string }) => {
       setName(data.name);
       setLobbyChips(data.chips);
       setLastSpinTime(data.last_spin);
       if (data.profilePic) setProfilePic(data.profilePic);
+      if (data.uid) setUid(data.uid);
       setView('lobby');
       localStorage.setItem('lucifer_poker_name', data.name);
     });
@@ -667,8 +669,8 @@ export default function App() {
           <img src="https://i.imgur.com/oEnM0Fz.png" alt="Background" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
         </div>
 
-        <div className="relative z-10 flex-1 flex items-end justify-center p-4 pb-16 md:pb-24">
-          <div className="w-full max-w-md bg-black/10 backdrop-blur-sm p-8 rounded-[2.5rem] border border-white/10 shadow-2xl text-center relative overflow-hidden">
+        <div className="relative z-10 flex-1 flex flex-col items-center justify-end p-4 pb-16 md:pb-24">
+          <div className="w-full max-w-md bg-black/10 backdrop-blur-sm p-8 rounded-[2.5rem] border border-white/10 shadow-2xl text-center relative overflow-hidden mb-8">
             <div className="relative z-10">
               <p className="text-white/80 text-sm mb-8 font-bold tracking-wide drop-shadow-lg">50K Chips & Lucifer Bots Active!</p>
               
@@ -686,6 +688,10 @@ export default function App() {
                 </button>
               </div>
             </div>
+          </div>
+          
+          <div className="text-white/40 text-[10px] md:text-xs font-bold uppercase tracking-[0.2em] text-center">
+            Copyright © 2026 Lucifer Games Studio. All Rights Reserved.
           </div>
         </div>
       </div>
@@ -709,19 +715,27 @@ export default function App() {
         {/* Header */}
         <header className="relative z-50 p-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 bg-zinc-900/80 backdrop-blur-xl p-2 pr-4 rounded-2xl border border-white/10 shadow-2xl min-w-0 max-w-[60%]">
-            <div className="relative group shrink-0">
-              <div className="w-10 h-10 md:w-12 md:h-12 bg-gradient-to-br from-red-600 to-red-900 rounded-xl border border-red-500/30 flex items-center justify-center shadow-lg overflow-hidden">
+            <div className="relative group shrink-0 w-12 h-12 md:w-16 md:h-16 flex items-center justify-center">
+              {/* Frame Image */}
+              <img 
+                src="https://i.imgur.com/rHDNmdU.png" 
+                alt="Frame" 
+                className="absolute inset-0 w-full h-full z-20 pointer-events-none object-contain" 
+                referrerPolicy="no-referrer"
+              />
+              
+              <div className="w-[75%] h-[75%] bg-gradient-to-br from-red-600 to-red-900 rounded-full flex items-center justify-center shadow-lg overflow-hidden relative z-10">
                 {profilePic ? (
                   <img src={profilePic} alt="Profile" className="w-full h-full object-cover" />
                 ) : (
                   <User className="w-6 h-6 md:w-7 md:h-7 text-white/50" />
                 )}
-                <label className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer transition-opacity">
+                <label className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer transition-opacity z-30">
                   <Camera className="w-4 h-4 text-white" />
                   <input type="file" accept="image/*" className="hidden" onChange={handleProfilePicUpload} />
                 </label>
               </div>
-              <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-emerald-500 border-2 border-[#0a0a0a] rounded-full" />
+              <div className="absolute bottom-1 right-1 w-3 h-3 bg-emerald-500 border-2 border-[#0a0a0a] rounded-full z-30" />
             </div>
             <div className="flex flex-col min-w-0 overflow-hidden">
               <span className="text-xs md:text-sm font-black text-white uppercase tracking-tight truncate">{name}</span>
@@ -873,27 +887,8 @@ export default function App() {
           </div>
         </main>
 
-        {/* Footer Navigation */}
-        <footer className="relative z-50 p-6 flex items-center justify-center gap-8 md:gap-16">
-           <button className="flex flex-col items-center gap-1 group">
-             <div className="w-10 h-10 bg-white/5 rounded-xl border border-white/10 flex items-center justify-center group-hover:bg-white/10 transition-all">
-               <Users className="w-5 h-5 text-white/40 group-hover:text-white" />
-             </div>
-             <span className="text-[8px] font-black uppercase tracking-widest text-white/20 group-hover:text-white/60">Friends</span>
-           </button>
-           <button className="flex flex-col items-center gap-1 group">
-             <div className="w-10 h-10 bg-white/5 rounded-xl border border-white/10 flex items-center justify-center group-hover:bg-white/10 transition-all">
-               <Plus className="w-5 h-5 text-white/40 group-hover:text-white" />
-             </div>
-             <span className="text-[8px] font-black uppercase tracking-widest text-white/20 group-hover:text-white/60">Shop</span>
-           </button>
-           <button className="flex flex-col items-center gap-1 group">
-             <div className="w-10 h-10 bg-white/5 rounded-xl border border-white/10 flex items-center justify-center group-hover:bg-white/10 transition-all">
-               <Settings className="w-5 h-5 text-white/40 group-hover:text-white" />
-             </div>
-             <span className="text-[8px] font-black uppercase tracking-widest text-white/20 group-hover:text-white/60">Settings</span>
-           </button>
-        </footer>
+        {/* Footer Navigation Removed per request */}
+        <div className="h-6" />
 
         {/* How to Play Button */}
         <div className="absolute bottom-6 left-6 z-50">
@@ -963,14 +958,17 @@ export default function App() {
                     <div className="space-y-4">
                       <div className="relative">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
-                        <input type="text" value={adminSearch} onChange={e => setAdminSearch(e.target.value)} placeholder="Search players..." className="w-full bg-black/40 border border-white/10 p-4 pl-12 rounded-xl outline-none focus:border-red-500/50 transition-all font-bold" />
+                        <input type="text" value={adminSearch} onChange={e => setAdminSearch(e.target.value)} placeholder="Search Name or UID..." className="w-full bg-black/40 border border-white/10 p-4 pl-12 rounded-xl outline-none focus:border-red-500/50 transition-all font-bold" />
                       </div>
                       <div className="max-h-[300px] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
-                        {adminStats.filter(s => s.name.toLowerCase().includes(adminSearch.toLowerCase())).map((stat, i) => (
+                        {adminStats.filter(s => 
+                          s.name.toLowerCase().includes(adminSearch.toLowerCase()) || 
+                          (s.uid && s.uid.toLowerCase().includes(adminSearch.toLowerCase()))
+                        ).map((stat, i) => (
                           <div key={i} className="bg-black/40 p-4 rounded-xl border border-white/5 flex items-center justify-between group hover:border-red-500/30 transition-all">
                             <div className="flex flex-col">
                               <span className="font-black text-white uppercase tracking-tight">{stat.name}</span>
-                              <span className="text-[10px] text-white/40 font-bold uppercase tracking-widest">UID: {stat.id?.slice(0,8)}</span>
+                              <span className="text-[10px] text-white/40 font-bold uppercase tracking-widest">UID: {stat.uid || 'N/A'}</span>
                             </div>
                             <div className="flex items-center gap-2">
                               <div className="flex items-center gap-1 text-yellow-500 font-black text-xs mr-4">
@@ -991,7 +989,7 @@ export default function App() {
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      <input type="text" value={manualName} onChange={e => setManualName(e.target.value)} placeholder="Player Name" className="w-full bg-black/40 border border-white/10 p-4 rounded-xl outline-none" />
+                      <input type="text" value={manualName} onChange={e => setManualName(e.target.value)} placeholder="Player Name or UID" className="w-full bg-black/40 border border-white/10 p-4 rounded-xl outline-none" />
                       <input type="number" value={manualAmount} onChange={e => setManualAmount(e.target.value)} placeholder="Amount" className="w-full bg-black/40 border border-white/10 p-4 rounded-xl outline-none" />
                       <div className="grid grid-cols-3 gap-2">
                         <button onClick={() => {
