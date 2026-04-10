@@ -144,7 +144,25 @@ const generateUID = () => {
   return Math.random().toString(36).substring(2, 10).toUpperCase();
 };
 
-const getPlayerChips = async (name: string, password?: string, ignorePassword = false): Promise<{ chips: number, last_spin: number, last_bonus: number, profilePic?: string, uid?: string, error?: string }> => {
+// --- Utilities ---
+function formatChips(amount: number): string {
+  if (!isFinite(amount) || amount === null || amount === undefined) return '0';
+  if (amount >= 1e12) {
+    return (amount / 1e12).toLocaleString(undefined, { maximumFractionDigits: 2 }) + ' trillion';
+  }
+  if (amount >= 1e9) {
+    return (amount / 1e9).toFixed(1).replace(/\.0$/, '') + 'B';
+  }
+  if (amount >= 1e6) {
+    return (amount / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+  }
+  if (amount >= 1e3) {
+    return (amount / 1e3).toFixed(1).replace(/\.0$/, '') + 'k';
+  }
+  return amount.toString();
+}
+
+const getPlayerChips = async (name: string, password?: string, ignorePassword = false): Promise<{ chips: number, last_spin: number, last_bonus: number, xp?: number, profilePic?: string, uid?: string, error?: string }> => {
   if (!db) {
     const projectId = firebaseConfig?.projectId || process.env.FIREBASE_PROJECT_ID;
     const apiKey = firebaseConfig?.apiKey || process.env.FIREBASE_API_KEY;
@@ -166,7 +184,14 @@ const getPlayerChips = async (name: string, password?: string, ignorePassword = 
       
       // If ignorePassword is true, we are doing an internal update (like spin or admin)
       if (ignorePassword) {
-        return { chips: (data.chips !== undefined) ? Number(data.chips) : 50000, last_spin: data.last_spin || 0, last_bonus: data.last_bonus || 0, profilePic: data.profilePic, uid: data.uid };
+        return { 
+          chips: (data.chips !== undefined) ? Number(data.chips) : 50000, 
+          last_spin: data.last_spin || 0, 
+          last_bonus: data.last_bonus || 0, 
+          profilePic: data.profilePic, 
+          uid: data.uid,
+          xp: data.xp || 0
+        };
       }
  
       // If the account HAS a password, we MUST verify it.
@@ -195,7 +220,14 @@ const getPlayerChips = async (name: string, password?: string, ignorePassword = 
         await updateDoc(playerRef, updates);
       }
       
-      return { chips: (data.chips !== undefined) ? Number(data.chips) : 50000, last_spin: data.last_spin || 0, last_bonus: data.last_bonus || 0, profilePic: data.profilePic, uid: data.uid };
+      return { 
+        chips: (data.chips !== undefined) ? Number(data.chips) : 50000, 
+        last_spin: data.last_spin || 0, 
+        last_bonus: data.last_bonus || 0, 
+        profilePic: data.profilePic, 
+        uid: data.uid,
+        xp: data.xp || 0
+      };
     }
     
     const initialChips = 50000;
@@ -204,12 +236,14 @@ const getPlayerChips = async (name: string, password?: string, ignorePassword = 
       name: safeName,
       uid: newUid,
       chips: initialChips,
+      xp: 0,
+      last_rewarded_tier: 'Bronze',
       last_spin: 0,
       last_bonus: 0,
       password: (password && password.trim() !== "") ? password.trim() : ''
     };
     await setDoc(playerRef, newData);
-    return { chips: initialChips, last_spin: 0, last_bonus: 0, uid: newUid };
+    return { chips: initialChips, last_spin: 0, last_bonus: 0, uid: newUid, xp: 0 };
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error('Firestore Error in getPlayerChips:', error);
@@ -328,6 +362,88 @@ async function startServer() {
     PLAY_NOW: 5000000 // 50 Lac
   };
 
+  const TIERS = [
+    { name: 'Bronze', minXP: 0, icon: '🥇', reward: 0 },
+    { name: 'Silver', minXP: 500, icon: '🥈', reward: 50000 },
+    { name: 'Gold', minXP: 1500, icon: '🥉', reward: 100000 },
+    { name: 'Platinum', minXP: 3000, icon: '🔷', reward: 200000 },
+    { name: 'Diamond', minXP: 6000, icon: '💎', reward: 500000 },
+    { name: 'Master', minXP: 10000, icon: '🔥', reward: 700000 },
+    { name: 'Grandmaster', minXP: 15000, icon: '🏆', reward: 1000000 },
+    { name: 'Legend', minXP: 30000, icon: '👑', reward: 5000000 },
+  ];
+
+  function getTier(xp: number) {
+    for (let i = TIERS.length - 1; i >= 0; i--) {
+      if (xp >= TIERS[i].minXP) return TIERS[i];
+    }
+    return TIERS[0];
+  }
+
+  async function awardXP(playerName: string, amount: number, isWinner: boolean = false) {
+    if (!db) return;
+    try {
+      const safeName = playerName.toLowerCase().trim();
+      const playerRef = doc(db, 'players', safeName);
+      const snap = await getDoc(playerRef);
+      if (!snap.exists()) return;
+
+      const data = snap.data();
+      const currentXP = Number(data.xp) || 0;
+      const newXP = currentXP + amount;
+      const currentChips = Number(data.chips) || 0;
+      const lastRewardedTier = data.last_rewarded_tier || 'Bronze';
+
+      const newTier = getTier(newXP);
+      let newChips = currentChips;
+      let rewarded = false;
+
+      // Check for rank up rewards
+      // We find the index of the last rewarded tier and the new tier
+      const lastIdx = TIERS.findIndex(t => t.name === lastRewardedTier);
+      const newIdx = TIERS.findIndex(t => t.name === newTier.name);
+
+      if (newIdx > lastIdx) {
+        // Award rewards for all tiers passed
+        for (let i = lastIdx + 1; i <= newIdx; i++) {
+          if (TIERS[i].reward > 0) {
+            newChips += TIERS[i].reward;
+            rewarded = true;
+            // Notify player if they are online
+            const sockets = await io.fetchSockets();
+            const playerSocket = sockets.find(s => (s as any).playerName === playerName);
+            if (playerSocket) {
+              playerSocket.emit("gameNotification", { 
+                message: `Rank Up! Reached ${TIERS[i].name}. Reward: ${formatChips(TIERS[i].reward)} chips added!` 
+              });
+              playerSocket.emit("chipsUpdated", newChips);
+            }
+          }
+        }
+      }
+
+      await updateDoc(playerRef, { 
+        xp: newXP, 
+        chips: newChips,
+        last_rewarded_tier: newTier.name 
+      });
+
+      // Update in-game state if player is in a room
+      Object.keys(rooms).forEach(rid => {
+        const p = rooms[rid].players.find((pl: any) => pl.name === playerName);
+        if (p) {
+          p.xp = newXP;
+          p.chips = newChips;
+          p.tier = newTier.name;
+          emitGameState(rid);
+        }
+      });
+
+    } catch (error) {
+      console.error("Error awarding XP:", error);
+    }
+  }
+
   const RANK_VALUE: Record<Rank, number> = {
     '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10, 'J': 11, 'Q': 12, 'K': 13, 'A': 14
   };
@@ -401,6 +517,8 @@ async function startServer() {
           id: p.id,
           name: p.name,
           chips: p.chips,
+          xp: p.xp || 0,
+          tier: p.tier || 'Bronze',
           isFolded: p.isFolded,
           isBlind: p.isBlind,
           isBot: p.isBot,
@@ -445,6 +563,17 @@ async function startServer() {
       game.winner = winner.name;
       winner.chips += game.pot;
       if (!winner.isBot && game.type !== ROOM_TYPES.PRIVATE) updatePlayerChips(winner.name, winner.chips);
+      
+      // Award XP
+      game.players.forEach((p: any) => {
+        if (!p.isBot) {
+          const xpGain = (p.name === winner.name) ? 40 : 10; // 10 base + 30 if win = 40 total for winner? 
+          // User said: "Every game e 10 xp Count hobe and Win korle 30 xp pabe"
+          // I'll interpret this as: Everyone gets 10, winner gets 30 EXTRA (total 40).
+          awardXP(p.name, xpGain, p.name === winner.name);
+        }
+      });
+
       console.log(`Winner: ${winner.name}, Pot: ${game.pot}`);
     }
     game.gameStarted = false;
@@ -466,6 +595,14 @@ async function startServer() {
         game.winner = active[0].name;
         active[0].chips += game.pot;
         if (!active[0].isBot && game.type !== ROOM_TYPES.PRIVATE) updatePlayerChips(active[0].name, active[0].chips);
+        
+        // Award XP
+        game.players.forEach((p: any) => {
+          if (!p.isBot) {
+            const xpGain = (p.name === active[0].name) ? 40 : 10;
+            awardXP(p.name, xpGain, p.name === active[0].name);
+          }
+        });
       }
       game.gameStarted = false;
       game.turnStartTime = undefined;
@@ -580,7 +717,15 @@ async function startServer() {
           socket.emit("error", dbData.error);
           return;
         }
-        socket.emit("loginSuccess", { name, chips: dbData.chips, last_spin: dbData.last_spin, last_bonus: dbData.last_bonus, profilePic: dbData.profilePic, uid: dbData.uid });
+        socket.emit("loginSuccess", { 
+          name, 
+          chips: dbData.chips, 
+          xp: dbData.xp || 0,
+          last_spin: dbData.last_spin, 
+          last_bonus: dbData.last_bonus, 
+          profilePic: dbData.profilePic, 
+          uid: dbData.uid 
+        });
       } catch (error) {
         console.error("Login error:", error);
         socket.emit("error", "Login failed. Please try again.");
@@ -803,6 +948,8 @@ async function startServer() {
           id: socket.id, 
           name: playerName, 
           chips: initialChips, 
+          xp: dbData.xp || 0,
+          tier: getTier(dbData.xp || 0).name,
           last_spin: dbData.last_spin,
           hand: [], 
           isFolded: false, 
