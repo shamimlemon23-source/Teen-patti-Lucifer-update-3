@@ -193,6 +193,7 @@ export default function App() {
   const [leaderboardData, setLeaderboardData] = useState<any[]>([]);
   const [soundSettings, setSoundSettings] = useState(soundService.getSettings());
   const [showHowToPlay, setShowHowToPlay] = useState(false);
+  const [showContactUs, setShowContactUs] = useState(false);
   const [chatMessages, setChatMessages] = useState<{sender: string, message: string, timestamp: string}[]>([]);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -1008,6 +1009,19 @@ export default function App() {
           </button>
         </div>
 
+        {/* Contact Us Button */}
+        <div className="absolute bottom-6 right-6 z-50">
+          <button 
+            onClick={() => setShowContactUs(true)}
+            className="group relative flex flex-col items-center gap-1 transition-transform active:scale-95"
+          >
+            <div className="w-12 h-12 md:w-16 md:h-16 rounded-xl overflow-hidden border border-white/10 shadow-2xl group-hover:border-red-500/50 transition-all bg-black/40 p-2">
+              <img src="https://i.imgur.com/GnVwYc9.png" alt="Contact Us" className="w-full h-full object-contain group-hover:scale-110 transition-transform" />
+            </div>
+            <span className="text-[8px] font-black uppercase tracking-widest text-white/40 group-hover:text-red-500">Contact Us</span>
+          </button>
+        </div>
+
         {/* Modals available in Lobby */}
         <AnimatePresence>
           {showHowToPlay && (
@@ -1119,6 +1133,39 @@ export default function App() {
                     ))
                   )}
                 </div>
+              </motion.div>
+            </div>
+          )}
+
+          {showContactUs && (
+            <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowContactUs(false)} className="absolute inset-0 bg-black/90 backdrop-blur-md" />
+              <motion.div 
+                initial={{ scale: 0.9, opacity: 0, y: 20 }} 
+                animate={{ scale: 1, opacity: 1, y: 0 }} 
+                exit={{ scale: 0.9, opacity: 0, y: 20 }} 
+                className="relative w-full max-w-sm bg-zinc-900 border border-white/10 rounded-3xl overflow-hidden shadow-2xl flex flex-col p-8 items-center text-center"
+              >
+                <div className="w-20 h-20 bg-red-600/20 rounded-2xl flex items-center justify-center mb-6 border border-red-500/30">
+                  <img src="https://i.imgur.com/GnVwYc9.png" alt="Contact" className="w-12 h-12 object-contain" />
+                </div>
+                <h2 className="text-2xl font-black uppercase tracking-tighter text-white mb-2">Contact Us</h2>
+                <p className="text-white/40 text-xs font-bold uppercase tracking-widest mb-6">Have questions or issues?</p>
+                
+                <a 
+                  href="mailto:lucifergamesstudio@gmil.com" 
+                  className="group bg-white/5 hover:bg-white/10 border border-white/10 p-4 rounded-2xl w-full transition-all flex flex-col items-center gap-1"
+                >
+                  <span className="text-[10px] font-black text-red-500 uppercase tracking-widest">Email Support</span>
+                  <span className="text-sm font-bold text-white group-hover:text-red-400 transition-colors">lucifergamesstudio@gmil.com</span>
+                </a>
+
+                <button 
+                  onClick={() => setShowContactUs(false)}
+                  className="mt-8 text-white/20 hover:text-white text-[10px] font-black uppercase tracking-[0.3em] transition-colors"
+                >
+                  Close
+                </button>
               </motion.div>
             </div>
           )}
