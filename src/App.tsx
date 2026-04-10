@@ -1630,21 +1630,21 @@ export default function App() {
                         )}
                       </div>
                       
-                      <div className="mt-2 bg-zinc-950/90 backdrop-blur-2xl px-4 md:px-8 py-1 md:py-3 rounded-xl md:rounded-2xl border border-white/10 flex flex-col items-center min-w-[80px] md:min-w-[160px] shadow-2xl">
-                        <span className="text-[8px] md:text-sm font-black truncate max-w-[70px] md:max-w-[140px] text-white tracking-tight leading-none">{player.name}</span>
-                        <div className="flex items-center gap-1 mt-0.5">
-                          <span className={`text-[6px] md:text-[10px] font-black uppercase tracking-wider ${getTier(player.xp || 0).color}`}>
+                      <div className="mt-2 bg-zinc-950/90 backdrop-blur-2xl px-4 md:px-8 py-1.5 md:py-3 rounded-xl md:rounded-2xl border border-white/10 flex flex-col items-center min-w-[90px] md:min-w-[160px] shadow-2xl">
+                        <span className="text-[10px] md:text-base font-black truncate max-w-[80px] md:max-w-[140px] text-white tracking-tight leading-none">{player.name}</span>
+                        <div className="flex items-center gap-1 mt-1">
+                          <span className={`text-[7px] md:text-[11px] font-black uppercase tracking-wider ${getTier(player.xp || 0).color}`}>
                             {getTier(player.xp || 0).icon} {getTier(player.xp || 0).name}
                           </span>
-                          <span className="text-[5px] md:text-[8px] text-white/30 font-bold">({player.xp || 0} XP)</span>
+                          <span className="text-[6px] md:text-[9px] text-white/30 font-bold">({player.xp || 0} XP)</span>
                         </div>
-                        <div className="flex items-center gap-1 text-[9px] md:text-base font-black text-yellow-500 mt-1">
-                          <Coins className="w-3 h-3 md:w-4 md:h-4" />
+                        <div className="flex items-center gap-1 text-[11px] md:text-lg font-black text-yellow-500 mt-1.5">
+                          <Coins className="w-3.5 h-3.5 md:w-5 md:h-5" />
                           {player.chips === -1 ? (
-                            <span className="text-red-500/80 animate-pulse text-[7px] md:text-xs">HIDDEN</span>
+                            <span className="text-red-500/80 animate-pulse text-[8px] md:text-sm">HIDDEN</span>
                           ) : (
                             formatChips(player.chips)
-                          )} <span className="text-[7px] md:text-xs opacity-60">$(USD)</span>
+                          )} <span className="text-[8px] md:text-xs opacity-60">$(USD)</span>
                         </div>
                       </div>
                     </div>
