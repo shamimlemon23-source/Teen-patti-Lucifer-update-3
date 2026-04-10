@@ -1607,7 +1607,7 @@ export default function App() {
                       </div>
                     )}
 
-                    <div className={`relative flex flex-col items-center ${player.isFolded ? 'opacity-30 grayscale' : ''} scale-[0.65] md:scale-[1.1]`}>
+                    <div className={`relative flex flex-col items-center ${player.isFolded ? 'opacity-30 grayscale' : ''} scale-[0.85] md:scale-[1.1]`}>
                       <div className={`w-12 h-12 md:w-20 md:h-20 rounded-2xl md:rounded-3xl border-2 flex items-center justify-center transition-all duration-500 relative ${isCurrent ? 'border-red-500 shadow-[0_0_40px_rgba(220,38,38,0.8)] scale-110 bg-red-500/20' : 'border-white/10 bg-black/80'} ${player.tier === 'Legend' ? 'shadow-[0_0_25px_rgba(234,179,8,0.6)] border-yellow-500/50' : ''}`}>
                         {player.profilePic ? (
                           <img src={player.profilePic} alt={player.name} className="w-full h-full object-cover rounded-2xl md:rounded-3xl" />
@@ -1630,21 +1630,21 @@ export default function App() {
                         )}
                       </div>
                       
-                      <div className="mt-2 bg-zinc-950/90 backdrop-blur-2xl px-4 md:px-8 py-1.5 md:py-3 rounded-xl md:rounded-2xl border border-white/10 flex flex-col items-center min-w-[90px] md:min-w-[160px] shadow-2xl">
-                        <span className="text-[10px] md:text-base font-black truncate max-w-[80px] md:max-w-[140px] text-white tracking-tight leading-none">{player.name}</span>
-                        <div className="flex items-center gap-1 mt-1">
-                          <span className={`text-[7px] md:text-[11px] font-black uppercase tracking-wider ${getTier(player.xp || 0).color}`}>
+                      <div className="mt-2 bg-zinc-950/90 backdrop-blur-2xl px-4 md:px-10 py-2 md:py-4 rounded-xl md:rounded-3xl border border-white/20 flex flex-col items-center min-w-[120px] md:min-w-[240px] shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+                        <span className="text-sm md:text-2xl font-black truncate max-w-[110px] md:max-w-[220px] text-white tracking-tight leading-none uppercase">{player.name}</span>
+                        <div className="flex items-center gap-1.5 mt-1.5">
+                          <span className={`text-[9px] md:text-sm font-black uppercase tracking-wider ${getTier(player.xp || 0).color}`}>
                             {getTier(player.xp || 0).icon} {getTier(player.xp || 0).name}
                           </span>
-                          <span className="text-[6px] md:text-[9px] text-white/30 font-bold">({player.xp || 0} XP)</span>
+                          <span className="text-[8px] md:text-[10px] text-white/40 font-bold">({player.xp || 0} XP)</span>
                         </div>
-                        <div className="flex items-center gap-1 text-[11px] md:text-lg font-black text-yellow-500 mt-1.5">
-                          <Coins className="w-3.5 h-3.5 md:w-5 md:h-5" />
+                        <div className="flex items-center gap-1.5 text-base md:text-3xl font-black text-yellow-500 mt-2">
+                          <Coins className="w-5 h-5 md:w-8 md:h-8" />
                           {player.chips === -1 ? (
-                            <span className="text-red-500/80 animate-pulse text-[8px] md:text-sm">HIDDEN</span>
+                            <span className="text-red-500/80 animate-pulse text-[12px] md:text-lg">HIDDEN</span>
                           ) : (
                             formatChips(player.chips)
-                          )} <span className="text-[8px] md:text-xs opacity-60">$(USD)</span>
+                          )} <span className="text-[10px] md:text-sm opacity-60 ml-0.5">$(USD)</span>
                         </div>
                       </div>
                     </div>
