@@ -1575,12 +1575,11 @@ export default function App() {
                   y = Math.sin(angle) * radiusY;
                   
                   if (y < -10) {
-                    y -= isMobile ? 10 : 8;
+                    y += isMobile ? 4 : 4; // Move top players DOWN into view
                     if (Math.abs(x) < 15) x = x < 0 ? -28 : 28;
                   }
                   if (y > 10) {
-                    // Move bottom seats UP to avoid overlap with "Your Balance"
-                    y -= isMobile ? 6 : 8; 
+                    y += isMobile ? 8 : 8; // Move bottom players DOWN
                   }
                 }
 
@@ -1630,7 +1629,7 @@ export default function App() {
                         )}
                       </div>
                       
-                      <div className="mt-2 bg-zinc-950/90 backdrop-blur-2xl px-4 md:px-10 py-2 md:py-4 rounded-xl md:rounded-3xl border border-white/20 flex flex-col items-center min-w-[120px] md:min-w-[240px] shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+                      <div className="mt-4 bg-zinc-950/90 backdrop-blur-2xl px-4 md:px-10 py-2 md:py-4 rounded-xl md:rounded-3xl border border-white/20 flex flex-col items-center min-w-[120px] md:min-w-[240px] shadow-[0_0_50px_rgba(0,0,0,0.5)]">
                         <span className="text-sm md:text-2xl font-black truncate max-w-[110px] md:max-w-[220px] text-white tracking-tight leading-none uppercase">{player.name}</span>
                         <div className="flex items-center gap-1.5 mt-1.5">
                           <span className={`text-[9px] md:text-sm font-black uppercase tracking-wider ${getTier(player.xp || 0).color}`}>
