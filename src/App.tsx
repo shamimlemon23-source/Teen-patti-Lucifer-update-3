@@ -54,10 +54,15 @@ interface Player {
   id: string;
   name: string;
   chips: number;
+  xp?: number;
+  tier?: string;
   hand: Card[];
   isFolded: boolean;
   isBlind: boolean;
   currentBet: number;
+  isBot?: boolean;
+  profilePic?: string;
+  uid?: string;
 }
 
 interface GameState {
@@ -85,6 +90,24 @@ const SUIT_COLORS: Record<Suit, string> = {
   diamonds: 'text-red-500',
   clubs: 'text-slate-900',
   spades: 'text-slate-900'
+};
+
+const TIERS = [
+  { name: 'Bronze', minXP: 0, icon: '🥇', color: 'text-orange-400' },
+  { name: 'Silver', minXP: 500, icon: '🥈', color: 'text-slate-300' },
+  { name: 'Gold', minXP: 1500, icon: '🥉', color: 'text-yellow-400' },
+  { name: 'Platinum', minXP: 3000, icon: '🔷', color: 'text-cyan-400' },
+  { name: 'Diamond', minXP: 6000, icon: '💎', color: 'text-blue-400' },
+  { name: 'Master', minXP: 10000, icon: '🔥', color: 'text-red-500' },
+  { name: 'Grandmaster', minXP: 15000, icon: '🏆', color: 'text-purple-500' },
+  { name: 'Legend', minXP: 30000, icon: '👑', color: 'text-yellow-500' },
+];
+
+const getTier = (xp: number) => {
+  for (let i = TIERS.length - 1; i >= 0; i--) {
+    if (xp >= TIERS[i].minXP) return TIERS[i];
+  }
+  return TIERS[0];
 };
 
 // --- Utilities ---
@@ -180,6 +203,7 @@ export default function App() {
   const [adminMessage, setAdminMessage] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [lobbyChips, setLobbyChips] = useState<number>(50000);
+  const [lobbyXP, setLobbyXP] = useState<number>(0);
   const [sideShowPrompt, setSideShowPrompt] = useState<{ fromName: string } | null>(null);
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -266,9 +290,10 @@ export default function App() {
   useEffect(() => {
     if (!socket) return;
 
-    socket.on('loginSuccess', (data: { name: string, chips: number, last_spin: number, last_bonus: number, profilePic?: string, uid?: string }) => {
+    socket.on('loginSuccess', (data: { name: string, chips: number, xp: number, last_spin: number, last_bonus: number, profilePic?: string, uid?: string }) => {
       setName(data.name);
       setLobbyChips(data.chips);
+      setLobbyXP(data.xp || 0);
       setLastSpinTime(data.last_spin);
       setLastBonusTime(data.last_bonus || 0);
       if (data.profilePic) setProfilePic(data.profilePic);
@@ -818,6 +843,12 @@ export default function App() {
             </div>
             <div className="flex flex-col min-w-0 overflow-hidden">
               <span className="text-xs md:text-sm font-black text-white uppercase tracking-tight truncate">{name}</span>
+              <div className="flex items-center gap-1.5">
+                <span className={`text-[9px] font-black uppercase tracking-wider ${getTier(lobbyXP).color}`}>
+                  {getTier(lobbyXP).icon} {getTier(lobbyXP).name}
+                </span>
+                <span className="text-[8px] text-white/30 font-bold">({lobbyXP} XP)</span>
+              </div>
               <span className="text-[8px] text-white/40 font-bold uppercase tracking-widest truncate">UID: {uid || 'Loading...'}</span>
               <div className="flex items-center gap-1 mt-0.5">
                 <Coins className="w-3 h-3 text-yellow-500 shrink-0" />
@@ -1577,11 +1608,16 @@ export default function App() {
                     )}
 
                     <div className={`relative flex flex-col items-center ${player.isFolded ? 'opacity-30 grayscale' : ''} scale-[0.65] md:scale-[1.1]`}>
-                      <div className={`w-12 h-12 md:w-20 md:h-20 rounded-2xl md:rounded-3xl border-2 flex items-center justify-center transition-all duration-500 relative ${isCurrent ? 'border-red-500 shadow-[0_0_40px_rgba(220,38,38,0.8)] scale-110 bg-red-500/20' : 'border-white/10 bg-black/80'}`}>
+                      <div className={`w-12 h-12 md:w-20 md:h-20 rounded-2xl md:rounded-3xl border-2 flex items-center justify-center transition-all duration-500 relative ${isCurrent ? 'border-red-500 shadow-[0_0_40px_rgba(220,38,38,0.8)] scale-110 bg-red-500/20' : 'border-white/10 bg-black/80'} ${player.tier === 'Legend' ? 'shadow-[0_0_25px_rgba(234,179,8,0.6)] border-yellow-500/50' : ''}`}>
                         {player.profilePic ? (
                           <img src={player.profilePic} alt={player.name} className="w-full h-full object-cover rounded-2xl md:rounded-3xl" />
                         ) : (
                           <User className={`w-6 h-6 md:w-12 md:h-12 ${isCurrent ? 'text-red-500' : 'text-white/20'}`} />
+                        )}
+                        {player.tier === 'Legend' && (
+                          <div className="absolute -top-2 -left-2 bg-yellow-500 rounded-full p-1 shadow-[0_0_15px_rgba(234,179,8,1)] z-20 border border-yellow-200">
+                            <span className="text-[10px]">👑</span>
+                          </div>
                         )}
                         {isMe && (
                           <div className="absolute -top-3 -right-3 bg-yellow-500 text-black text-[8px] md:text-[10px] font-black px-2 py-1 rounded-lg shadow-xl z-10 uppercase tracking-tighter">You</div>
@@ -1595,8 +1631,14 @@ export default function App() {
                       </div>
                       
                       <div className="mt-2 bg-zinc-950/90 backdrop-blur-2xl px-4 md:px-8 py-1 md:py-3 rounded-xl md:rounded-2xl border border-white/10 flex flex-col items-center min-w-[80px] md:min-w-[160px] shadow-2xl">
-                        <span className="text-[8px] md:text-sm font-black truncate max-w-[70px] md:max-w-[140px] text-white tracking-tight">{player.name}</span>
-                        <div className="flex items-center gap-1 text-[9px] md:text-base font-black text-yellow-500">
+                        <span className="text-[8px] md:text-sm font-black truncate max-w-[70px] md:max-w-[140px] text-white tracking-tight leading-none">{player.name}</span>
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <span className={`text-[6px] md:text-[10px] font-black uppercase tracking-wider ${getTier(player.xp || 0).color}`}>
+                            {getTier(player.xp || 0).icon} {getTier(player.xp || 0).name}
+                          </span>
+                          <span className="text-[5px] md:text-[8px] text-white/30 font-bold">({player.xp || 0} XP)</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-[9px] md:text-base font-black text-yellow-500 mt-1">
                           <Coins className="w-3 h-3 md:w-4 md:h-4" />
                           {player.chips === -1 ? (
                             <span className="text-red-500/80 animate-pulse text-[7px] md:text-xs">HIDDEN</span>
