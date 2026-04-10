@@ -1153,11 +1153,11 @@ export default function App() {
                 <p className="text-white/40 text-xs font-bold uppercase tracking-widest mb-6">Have questions or issues?</p>
                 
                 <a 
-                  href="mailto:lucifergamesstudio@gmil.com" 
+                  href="mailto:lucifergamesstudio@gmail.com" 
                   className="group bg-white/5 hover:bg-white/10 border border-white/10 p-4 rounded-2xl w-full transition-all flex flex-col items-center gap-1"
                 >
                   <span className="text-[10px] font-black text-red-500 uppercase tracking-widest">Email Support</span>
-                  <span className="text-sm font-bold text-white group-hover:text-red-400 transition-colors">lucifergamesstudio@gmil.com</span>
+                  <span className="text-sm font-bold text-white group-hover:text-red-400 transition-colors">lucifergamesstudio@gmail.com</span>
                 </a>
 
                 <button 
