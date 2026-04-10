@@ -32,6 +32,14 @@
         "password": {
           "type": "string",
           "description": "Hashed or plain password for security"
+        },
+        "xp": {
+          "type": "number",
+          "description": "Experience points for tier system"
+        },
+        "last_rewarded_tier": {
+          "type": "string",
+          "description": "The name of the last tier for which a reward was given"
         }
       },
       "required": ["name", "uid", "chips"]
