@@ -63,10 +63,12 @@ interface Player {
   isBot?: boolean;
   profilePic?: string;
   uid?: string;
+  seatIndex?: number;
 }
 
 interface GameState {
   players: Player[];
+  seats: (string | null)[];
   pot: number;
   currentTurn: number;
   lastBet: number;
@@ -137,7 +139,7 @@ interface CardComponentProps {
   key?: string | number;
 }
 
-const CardComponent = ({ card, hidden, index }: CardComponentProps) => {
+const CardComponent = React.memo(({ card, hidden, index }: CardComponentProps) => {
   const tilt = useMemo(() => (index - 1) * 8, [index]);
   
   useEffect(() => {
@@ -181,7 +183,7 @@ const CardComponent = ({ card, hidden, index }: CardComponentProps) => {
       )}
     </motion.div>
   );
-};
+});
 
 export default function App() {
   const [socket, setSocket] = useState<Socket | null>(null);
@@ -198,6 +200,21 @@ export default function App() {
   const [adminTab, setAdminTab] = useState<'players' | 'manual'>('players');
   const [manualName, setManualName] = useState('');
   const [manualAmount, setManualAmount] = useState('50000');
+  const [rememberMe, setRememberMe] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [chatInput, setChatInput] = useState('');
+  const chatEndRef = React.useRef<HTMLDivElement>(null);
+
+  // Remember Login
+  useEffect(() => {
+    const saved = localStorage.getItem('lucifer_login');
+    if (saved) {
+      const { name: sName, password: sPass } = JSON.parse(saved);
+      setName(sName);
+      setPassword(sPass);
+      setRememberMe(true);
+    }
+  }, []);
   const [adminStats, setAdminStats] = useState<any[]>([]);
   const [adminSearch, setAdminSearch] = useState('');
   const [adminMessage, setAdminMessage] = useState('');
@@ -220,9 +237,11 @@ export default function App() {
   const [showContactUs, setShowContactUs] = useState(false);
   const [chatMessages, setChatMessages] = useState<{sender: string, message: string, timestamp: string}[]>([]);
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [chatInput, setChatInput] = useState('');
-  const chatEndRef = React.useRef<HTMLDivElement>(null);
+
+  // Auto-scroll chat
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages]);
 
   const isAdmin = useMemo(() => name.trim().toUpperCase() === 'LUCIFER_ADMIN_777', [name]);
 
@@ -298,6 +317,14 @@ export default function App() {
       setLastBonusTime(data.last_bonus || 0);
       if (data.profilePic) setProfilePic(data.profilePic);
       if (data.uid) setUid(data.uid);
+      
+      // Save login if rememberMe is checked
+      if (rememberMe) {
+        localStorage.setItem('lucifer_login', JSON.stringify({ name: data.name, password }));
+      } else {
+        localStorage.removeItem('lucifer_login');
+      }
+      
       setView('lobby');
       localStorage.setItem('lucifer_poker_name', data.name);
     });
@@ -485,6 +512,11 @@ export default function App() {
       setJoined(true); 
       setView('game');
     } 
+  };
+
+  const sitDown = (seatIndex: number) => {
+    if (!socket || !roomId) return;
+    socket.emit('sitDown', { roomId, seatIndex });
   };
 
   const login = async () => {
@@ -798,6 +830,17 @@ export default function App() {
                 <button onClick={login} disabled={!name} className="w-full bg-red-600 p-5 rounded-2xl font-black text-xl hover:bg-red-500 transition-all active:scale-95 text-white shadow-[0_0_40px_rgba(220,38,38,0.4)] border-b-4 border-red-800">
                   ENTER UNDERWORLD
                 </button>
+
+                <div className="flex items-center justify-center gap-2 mt-6">
+                  <input 
+                    type="checkbox" 
+                    id="rememberMe" 
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="w-4 h-4 rounded border-white/10 bg-black/50 text-red-500 focus:ring-red-500"
+                  />
+                  <label htmlFor="rememberMe" className="text-sm text-white/60 cursor-pointer hover:text-white transition-colors font-bold uppercase tracking-widest">Remember Login</label>
+                </div>
               </div>
             </div>
           </div>
@@ -1557,106 +1600,110 @@ export default function App() {
                 )}
               </div>
 
-              {/* Players Positioning */}
-              {rotatedPlayers.map((player, idx) => {
-                const originalIdx = gameState?.players.findIndex(p => p.id === player.id);
+              {/* Fixed Seats Positioning */}
+              {[0, 1, 2, 3, 4].map((seatIdx) => {
                 const isMobile = window.innerWidth < 768;
                 const isPortrait = window.innerHeight > window.innerWidth;
-                let x, y;
                 
-                const radiusX = isMobile ? (isPortrait ? 32 : 42) : 40;
-                const radiusY = isMobile ? (isPortrait ? 32 : 35) : 35;
-
-                if (rotatedPlayers.length === 1) {
-                  x = 0; y = radiusY;
-                } else {
-                  const angle = (idx / rotatedPlayers.length) * 2 * Math.PI + Math.PI / 2;
-                  x = Math.cos(angle) * radiusX;
-                  y = Math.sin(angle) * radiusY;
-                  
-                  if (y < -10) {
-                    y -= isMobile ? 8 : 10; // Push top players UP slightly
-                    if (Math.abs(x) < 15) x = x < 0 ? -28 : 28;
-                  }
-                  if (y > 10) {
-                    y -= isMobile ? 4 : 6; // Pull bottom players UP slightly
-                  }
-                }
-
-                const isCurrent = gameState?.currentTurn === originalIdx;
-                const isMe = player.id === socket?.id;
-                const isTopHalf = y < 0; 
+                // Fixed positions for 5 seats
+                const positions = [
+                  { x: 0, y: isMobile ? 38 : 38 },    // Bottom
+                  { x: -42, y: 5 },                   // Left
+                  { x: -25, y: -38 },                 // Top Left
+                  { x: 25, y: -38 },                  // Top Right
+                  { x: 42, y: 5 },                    // Right
+                ];
+                
+                const { x, y } = positions[seatIdx];
+                const player = gameState?.players.find(p => p.seatIndex === seatIdx);
+                const isTopHalf = y < 0;
+                const originalIdx = player ? gameState?.players.findIndex(p => p.id === player.id) : -1;
+                const isCurrent = player && gameState?.currentTurn === originalIdx;
+                const isMe = player?.id === socket?.id;
 
                 return (
                   <motion.div
-                    key={player.id}
+                    key={`seat-${seatIdx}`}
                     style={{ left: `${50 + x}%`, top: `${50 + y}%` }}
-                    className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-2 z-40"
+                    className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center z-40"
                   >
-                    {!isTopHalf && (
-                      <div className="flex -space-x-6 md:-space-x-14 mb-2 scale-[0.6] md:scale-[1.1] origin-bottom">
-                        {player.hand.map((card: Card, cIdx: number) => (
-                          <CardComponent 
-                            key={`${player.id}-${cIdx}`} 
-                            card={card} 
-                            hidden={isMe ? player.isBlind : (!gameState?.winner || player.isFolded)} 
-                            index={cIdx} 
-                          />
-                        ))}
-                      </div>
-                    )}
-
-                    <div className={`relative flex flex-col items-center ${player.isFolded ? 'opacity-30 grayscale' : ''} scale-[0.7] md:scale-[0.9]`}>
-                      <div className={`w-12 h-12 md:w-20 md:h-20 rounded-2xl md:rounded-3xl border-2 flex items-center justify-center transition-all duration-500 relative ${isCurrent ? 'border-red-500 shadow-[0_0_40px_rgba(220,38,38,0.8)] scale-110 bg-red-500/20' : 'border-white/10 bg-black/80'} ${player.tier === 'Legend' ? 'shadow-[0_0_25px_rgba(234,179,8,0.6)] border-yellow-500/50' : ''}`}>
-                        {player.profilePic ? (
-                          <img src={player.profilePic} alt={player.name} className="w-full h-full object-cover rounded-2xl md:rounded-3xl" />
-                        ) : (
-                          <User className={`w-6 h-6 md:w-12 md:h-12 ${isCurrent ? 'text-red-500' : 'text-white/20'}`} />
-                        )}
-                        {player.tier === 'Legend' && (
-                          <div className="absolute -top-2 -left-2 bg-yellow-500 rounded-full p-1 shadow-[0_0_15px_rgba(234,179,8,1)] z-20 border border-yellow-200">
-                            <span className="text-[10px]">👑</span>
+                    {!player ? (
+                      <button 
+                        onClick={() => sitDown(seatIdx)}
+                        className="w-12 h-12 md:w-20 md:h-20 rounded-full border-2 border-dashed border-white/20 bg-black/40 flex items-center justify-center hover:bg-white/10 hover:border-white/40 transition-all group active:scale-90"
+                      >
+                        <Plus className="w-6 h-6 md:w-10 md:h-10 text-white/20 group-hover:text-white/60" />
+                        <span className="absolute -bottom-6 text-[8px] md:text-xs font-black text-white/20 uppercase tracking-widest">Empty</span>
+                      </button>
+                    ) : (
+                      <div className="flex flex-col items-center gap-1">
+                        {!isTopHalf && (
+                          <div className="flex -space-x-6 md:-space-x-14 mb-[-15px] md:mb-[-30px] scale-[0.55] md:scale-[0.9] origin-bottom z-50">
+                            {player.hand.map((card: Card, cIdx: number) => (
+                              <CardComponent 
+                                key={`${player.id}-${cIdx}`} 
+                                card={card} 
+                                hidden={isMe ? player.isBlind : (!gameState?.winner || player.isFolded)} 
+                                index={cIdx} 
+                              />
+                            ))}
                           </div>
                         )}
-                        {isMe && (
-                          <div className="absolute -top-3 -right-3 bg-yellow-500 text-black text-[8px] md:text-[10px] font-black px-2 py-1 rounded-lg shadow-xl z-10 uppercase tracking-tighter">You</div>
-                        )}
-                        {!player.isBlind && !player.isFolded && (
-                          <div className="absolute -bottom-3 bg-emerald-500 text-white text-[6px] md:text-[8px] font-black px-2 py-0.5 rounded-full shadow-lg z-10 uppercase tracking-widest border border-emerald-400/50">Seen</div>
-                        )}
-                        {isCurrent && (
-                          <div className="absolute -inset-2 border-2 border-red-500/30 rounded-[2rem] animate-ping" />
-                        )}
-                      </div>
-                      
-                      <div className="mt-2 bg-zinc-950/90 backdrop-blur-2xl px-3 md:px-6 py-1.5 md:py-3 rounded-xl md:rounded-2xl border border-white/10 flex flex-col items-center min-w-[100px] md:min-w-[180px] shadow-2xl">
-                        <span className="text-[10px] md:text-base font-black truncate max-w-[90px] md:max-w-[160px] text-white tracking-tight leading-none">{player.name}</span>
-                        <div className="flex items-center gap-1 mt-1">
-                          <span className={`text-[7px] md:text-[11px] font-black uppercase tracking-wider ${getTier(player.xp || 0).color}`}>
-                            {getTier(player.xp || 0).icon} {getTier(player.xp || 0).name}
-                          </span>
-                          <span className="text-[6px] md:text-[9px] text-white/30 font-bold">({player.xp || 0} XP)</span>
+
+                        <div className={`relative flex flex-col items-center ${player.isFolded ? 'opacity-30 grayscale' : ''} scale-[0.7] md:scale-[0.9]`}>
+                          <div className={`w-12 h-12 md:w-20 md:h-20 rounded-2xl md:rounded-3xl border-2 flex items-center justify-center transition-all duration-500 relative ${isCurrent ? 'border-red-500 shadow-[0_0_40px_rgba(220,38,38,0.8)] scale-110 bg-red-500/20' : 'border-white/10 bg-black/80'} ${player.tier === 'Legend' ? 'shadow-[0_0_25px_rgba(234,179,8,0.6)] border-yellow-500/50' : ''}`}>
+                            {player.profilePic ? (
+                              <img src={player.profilePic} alt={player.name} className="w-full h-full object-cover rounded-2xl md:rounded-3xl" />
+                            ) : (
+                              <User className={`w-6 h-6 md:w-12 md:h-12 ${isCurrent ? 'text-red-500' : 'text-white/20'}`} />
+                            )}
+                            {player.tier === 'Legend' && (
+                              <div className="absolute -top-2 -left-2 bg-yellow-500 rounded-full p-1 shadow-[0_0_15px_rgba(234,179,8,1)] z-20 border border-yellow-200">
+                                <span className="text-[10px]">👑</span>
+                              </div>
+                            )}
+                            {isMe && (
+                              <div className="absolute -top-3 -right-3 bg-yellow-500 text-black text-[8px] md:text-[10px] font-black px-2 py-1 rounded-lg shadow-xl z-10 uppercase tracking-tighter">You</div>
+                            )}
+                            {!player.isBlind && !player.isFolded && (
+                              <div className="absolute -bottom-3 bg-emerald-500 text-white text-[6px] md:text-[8px] font-black px-2 py-0.5 rounded-full shadow-lg z-10 uppercase tracking-widest border border-emerald-400/50">Seen</div>
+                            )}
+                            {isCurrent && (
+                              <div className="absolute -inset-2 border-2 border-red-500/30 rounded-[2rem] animate-ping" />
+                            )}
+                          </div>
+                          
+                          <div className="mt-2 bg-zinc-950/90 backdrop-blur-2xl px-3 md:px-6 py-1.5 md:py-3 rounded-xl md:rounded-2xl border border-white/10 flex flex-col items-center min-w-[100px] md:min-w-[180px] shadow-2xl">
+                            <span className="text-[10px] md:text-base font-black truncate max-w-[90px] md:max-w-[160px] text-white tracking-tight leading-none">{player.name}</span>
+                            <div className="flex items-center gap-1 mt-1">
+                              <span className={`text-[7px] md:text-[11px] font-black uppercase tracking-wider ${getTier(player.xp || 0).color}`}>
+                                {getTier(player.xp || 0).icon} {getTier(player.xp || 0).name}
+                              </span>
+                              <span className="text-[6px] md:text-[9px] text-white/30 font-bold">({player.xp || 0} XP)</span>
+                            </div>
+                            <div className="flex items-center gap-1 text-[11px] md:text-lg font-black text-yellow-500 mt-1.5">
+                              <Coins className="w-3.5 h-3.5 md:w-5 md:h-5" />
+                              {player.chips === -1 ? (
+                                <span className="text-red-500/80 animate-pulse text-[8px] md:text-sm">HIDDEN</span>
+                              ) : (
+                                (isMe || gameState?.type === 'PLAY_NOW') ? formatChips(player.chips) : '••••••'
+                              )} <span className="text-[8px] md:text-xs opacity-60">$(USD)</span>
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1 text-[11px] md:text-lg font-black text-yellow-500 mt-1.5">
-                          <Coins className="w-3.5 h-3.5 md:w-5 md:h-5" />
-                          {player.chips === -1 ? (
-                            <span className="text-red-500/80 animate-pulse text-[8px] md:text-sm">HIDDEN</span>
-                          ) : (
-                            isMe ? formatChips(player.chips) : '••••••'
-                          )} <span className="text-[8px] md:text-xs opacity-60">$(USD)</span>
-                        </div>
-                      </div>
-                    </div>
-                    {isTopHalf && (
-                      <div className="flex -space-x-6 md:-space-x-14 mt-2 scale-[0.6] md:scale-[1.1] origin-top">
-                        {player.hand.map((card: Card, cIdx: number) => (
-                          <CardComponent 
-                            key={`${player.id}-${cIdx}`} 
-                            card={card} 
-                            hidden={isMe ? player.isBlind : (!gameState?.winner || player.isFolded)} 
-                            index={cIdx} 
-                          />
-                        ))}
+
+                        {isTopHalf && (
+                          <div className="flex -space-x-6 md:-space-x-14 mt-[-15px] md:mt-[-30px] scale-[0.55] md:scale-[0.9] origin-top z-50">
+                            {player.hand.map((card: Card, cIdx: number) => (
+                              <CardComponent 
+                                key={`${player.id}-${cIdx}`} 
+                                card={card} 
+                                hidden={isMe ? player.isBlind : (!gameState?.winner || player.isFolded)} 
+                                index={cIdx} 
+                              />
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
                   </motion.div>
