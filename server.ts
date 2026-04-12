@@ -513,6 +513,7 @@ async function startServer() {
         currentTurn: game.currentTurn,
         turnStartTime: game.turnStartTime,
         turnDuration: game.turnDuration,
+        seats: game.seats,
         players: game.players.map((p: any) => ({
           id: p.id,
           name: p.name,
@@ -523,7 +524,8 @@ async function startServer() {
           isBlind: p.isBlind,
           isBot: p.isBot,
           profilePic: p.profilePic,
-          uid: p.uid
+          uid: p.uid,
+          seatIndex: p.seatIndex
         }))
       };
 
@@ -777,6 +779,54 @@ async function startServer() {
       }
     });
 
+    socket.on("sitDown", async ({ roomId, seatIndex }) => {
+      const rid = roomId.trim().toLowerCase();
+      const game = rooms[rid];
+      if (!game) return;
+      
+      if (seatIndex < 0 || seatIndex >= 5 || game.seats[seatIndex]) {
+        socket.emit("error", "Seat already taken!");
+        return;
+      }
+
+      const playerName = (socket as any).playerName;
+      if (!playerName) return;
+
+      // Check if already sitting
+      const alreadySitting = game.players.find((p: any) => p.name === playerName);
+      if (alreadySitting) {
+        socket.emit("error", "You are already sitting!");
+        return;
+      }
+
+      const dbData = await getPlayerChips(playerName, "", true);
+      
+      game.players.push({ 
+        id: socket.id, 
+        name: playerName, 
+        chips: dbData.chips, 
+        xp: dbData.xp || 0,
+        tier: getTier(dbData.xp || 0).name,
+        last_spin: dbData.last_spin,
+        hand: [], 
+        isFolded: false, 
+        isBlind: true, 
+        currentBet: 0, 
+        isBot: false,
+        profilePic: dbData.profilePic,
+        seatIndex: seatIndex
+      });
+      
+      game.seats[seatIndex] = socket.id;
+      emitGameState(rid);
+
+      if (!game.gameStarted && game.players.length >= 2) {
+        setTimeout(() => {
+          if (!game.gameStarted && game.players.length >= 2) startGame(rid);
+        }, 5000);
+      }
+    });
+
     socket.on("leaveRoom", (roomId) => {
       const rid = roomId.trim().toLowerCase();
       const game = rooms[rid];
@@ -785,6 +835,7 @@ async function startServer() {
       const playerIndex = game.players.findIndex((p: any) => p.id === socket.id);
       if (playerIndex !== -1) {
         const player = game.players[playerIndex];
+        if (player.seatIndex !== undefined) game.seats[player.seatIndex] = null;
         console.log(`Player ${player.name} leaving room ${rid}`);
         
         const wasTheirTurn = game.gameStarted && game.currentTurn === playerIndex;
@@ -830,6 +881,8 @@ async function startServer() {
         const playerIndex = game.players.findIndex((p: any) => p.id === socket.id);
         if (playerIndex !== -1) {
           const player = game.players[playerIndex];
+          if (player.seatIndex !== undefined) game.seats[player.seatIndex] = null;
+          
           console.log(`Removing ${player.name} from room ${rid}`);
           
           const wasTheirTurn = game.gameStarted && game.currentTurn === playerIndex;
@@ -908,9 +961,8 @@ async function startServer() {
 
       if (!rooms[rid]) {
         rooms[rid] = { 
-          players: [
-            { id: "bot1", name: "😈 Lucifer Bot", chips: 50000, hand: [], isFolded: false, isBlind: true, currentBet: 0, isBot: true }
-          ], 
+          players: [], 
+          seats: new Array(5).fill(null),
           pot: 0, 
           currentTurn: 0, 
           lastBet: 1000, 
@@ -919,48 +971,33 @@ async function startServer() {
           deck: [], 
           roundCount: 0,
           type: type,
-          password: type === ROOM_TYPES.PRIVATE ? password : null // Set room password for private tables
+          password: type === ROOM_TYPES.PRIVATE ? password : null
         };
+        
+        // Add a bot to a random seat if it's a new room
+        const botSeat = Math.floor(Math.random() * 5);
+        const bot = { id: "bot1", name: "😈 Lucifer Bot", chips: 50000, hand: [], isFolded: false, isBlind: true, currentBet: 0, isBot: true, seatIndex: botSeat };
+        rooms[rid].players.push(bot);
+        rooms[rid].seats[botSeat] = "bot1";
       }
       const game = rooms[rid];
       
-      // Check if player already in room
-      const existingPlayerIndex = game.players.findIndex((p: any) => p.name === playerName);
-      
-      // Remove player from any other room they might be in to prevent ghosts
+      // Remove player from any other room they might be in
       Object.keys(rooms).forEach(otherRid => {
-        if (otherRid !== rid) {
-          const gameInOther = rooms[otherRid];
-          const pIdx = gameInOther.players.findIndex((p: any) => p.name === playerName);
-          if (pIdx !== -1) {
-            gameInOther.players.splice(pIdx, 1);
-            emitGameState(otherRid);
-          }
+        const gameInOther = rooms[otherRid];
+        const pIdx = gameInOther.players.findIndex((p: any) => p.name === playerName);
+        if (pIdx !== -1) {
+          const p = gameInOther.players[pIdx];
+          if (p.seatIndex !== undefined) gameInOther.seats[p.seatIndex] = null;
+          gameInOther.players.splice(pIdx, 1);
+          emitGameState(otherRid);
         }
       });
       
-      if (existingPlayerIndex !== -1 && !game.players[existingPlayerIndex].isBot) {
-        game.players[existingPlayerIndex].id = socket.id;
-        game.players[existingPlayerIndex].chips = initialChips;
-        game.players[existingPlayerIndex].profilePic = dbData.profilePic;
-      } else {
-        game.players.push({ 
-          id: socket.id, 
-          name: playerName, 
-          chips: initialChips, 
-          xp: dbData.xp || 0,
-          tier: getTier(dbData.xp || 0).name,
-          last_spin: dbData.last_spin,
-          hand: [], 
-          isFolded: false, 
-          isBlind: true, 
-          currentBet: 0, 
-          isBot: false,
-          profilePic: dbData.profilePic
-        });
-      }
-      
       socket.join(rid);
+      (socket as any).playerName = playerName;
+      (socket as any).currentRoom = rid;
+      
       emitGameState(rid);
 
       // Auto-start if 2+ players and not started
