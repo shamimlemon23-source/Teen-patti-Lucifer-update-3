@@ -203,6 +203,7 @@ export default function App() {
   const [rememberMe, setRememberMe] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [chatInput, setChatInput] = useState('');
+  const [confirmAction, setConfirmAction] = useState<{ type: string, target: string | null, amount?: number } | null>(null);
   const chatEndRef = React.useRef<HTMLDivElement>(null);
 
   // Remember Login
@@ -528,6 +529,10 @@ export default function App() {
   useEffect(() => {
     if (isChatOpen) {
       setUnreadCount(0);
+      // Ensure scroll happens after render
+      setTimeout(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
     }
   }, [isChatOpen]);
 
@@ -1601,32 +1606,30 @@ export default function App() {
               </div>
 
               {/* Fixed Seats Positioning */}
-              {[0, 1, 2, 3, 4].map((seatIdx) => {
+              {(() => {
                 const isMobile = window.innerWidth < 768;
-                const isPortrait = window.innerHeight > window.innerWidth;
-                
-                // Fixed positions for 5 seats
                 const positions = [
-                  { x: 0, y: isMobile ? 38 : 38 },    // Bottom
-                  { x: -42, y: 5 },                   // Left
-                  { x: -25, y: -38 },                 // Top Left
-                  { x: 25, y: -38 },                  // Top Right
-                  { x: 42, y: 5 },                    // Right
+                  { x: 0, y: 38 },    // Bottom
+                  { x: -42, y: 5 },   // Left
+                  { x: -25, y: -38 }, // Top Left
+                  { x: 25, y: -38 },  // Top Right
+                  { x: 42, y: 5 },    // Right
                 ];
-                
-                const { x, y } = positions[seatIdx];
-                const player = gameState?.players.find(p => p.seatIndex === seatIdx);
-                const isTopHalf = y < 0;
-                const originalIdx = player ? gameState?.players.findIndex(p => p.id === player.id) : -1;
-                const isCurrent = player && gameState?.currentTurn === originalIdx;
-                const isMe = player?.id === socket?.id;
 
-                return (
-                  <motion.div
-                    key={`seat-${seatIdx}`}
-                    style={{ left: `${50 + x}%`, top: `${50 + y}%` }}
-                    className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center z-40"
-                  >
+                return [0, 1, 2, 3, 4].map((seatIdx) => {
+                  const { x, y } = positions[seatIdx];
+                  const player = gameState?.players.find(p => p.seatIndex === seatIdx);
+                  const isTopHalf = y < 0;
+                  const originalIdx = player ? gameState?.players.findIndex(p => p.id === player.id) : -1;
+                  const isCurrent = player && gameState?.currentTurn === originalIdx;
+                  const isMe = player?.id === socket?.id;
+
+                  return (
+                    <motion.div
+                      key={`seat-${seatIdx}`}
+                      style={{ left: `${50 + x}%`, top: `${50 + y}%` }}
+                      className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center z-40"
+                    >
                     {!player ? (
                       <button 
                         onClick={() => sitDown(seatIdx)}
@@ -1708,7 +1711,8 @@ export default function App() {
                     )}
                   </motion.div>
                 );
-              })}
+              });
+            })()}
             </div>
           </main>
 
@@ -1884,8 +1888,8 @@ export default function App() {
                               </div>
                               <button onClick={() => handleAdminAdd(stat.name)} className="p-1.5 md:p-2 bg-green-600/10 hover:bg-green-600/20 border border-green-500/20 rounded-lg text-green-500 text-[8px] md:text-[10px] font-black uppercase">Add</button>
                               <button onClick={() => handleAdminSet(stat.name)} className="p-1.5 md:p-2 bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/20 rounded-lg text-blue-500 text-[8px] md:text-[10px] font-black uppercase">Set</button>
-                              <button onClick={() => adminAction(stat.name, 'reset')} className="p-1.5 md:p-2 bg-red-600/10 hover:bg-red-600/20 border border-red-500/20 rounded-lg text-red-500 text-[8px] md:text-[10px] font-black uppercase">Reset</button>
-                              <button onClick={() => { if(confirm(`Delete ${stat.name}?`)) adminAction(stat.name, 'delete'); }} className="p-1.5 md:p-2 bg-zinc-600/10 hover:bg-zinc-600/20 border border-zinc-500/20 rounded-lg text-zinc-500 text-[8px] md:text-[10px] font-black uppercase">Del</button>
+                              <button onClick={() => setConfirmAction({ type: 'reset', target: stat.name })} className="p-1.5 md:p-2 bg-red-600/10 hover:bg-red-600/20 border border-red-500/20 rounded-lg text-red-500 text-[8px] md:text-[10px] font-black uppercase">Reset</button>
+                              <button onClick={() => setConfirmAction({ type: 'delete', target: stat.name })} className="p-1.5 md:p-2 bg-zinc-600/10 hover:bg-zinc-600/20 border border-zinc-500/20 rounded-lg text-zinc-500 text-[8px] md:text-[10px] font-black uppercase">Del</button>
                             </div>
                           </div>
                         ))}
@@ -1911,10 +1915,10 @@ export default function App() {
                       }} className="bg-blue-600 p-3 rounded-xl font-black uppercase text-[10px]">Set</button>
                       <button onClick={() => {
                         if (!manualName) return alert("Enter player name");
-                        adminAction(manualName, 'set', 1000000000);
+                        setConfirmAction({ type: 'set', target: manualName, amount: 1000000000 });
                       }} className="bg-yellow-600 p-3 rounded-xl font-black uppercase text-[10px] text-black">Unlimited</button>
                     </div>
-                    <button onClick={() => { if(confirm("Reset ALL players?")) adminAction(null, 'resetAll'); }} className="w-full bg-red-600/20 border border-red-500/50 p-4 rounded-xl font-black uppercase text-red-500">Reset All Players</button>
+                    <button onClick={() => setConfirmAction({ type: 'resetAll', target: null })} className="w-full bg-red-600/20 border border-red-500/50 p-4 rounded-xl font-black uppercase text-red-500">Reset All Players</button>
                   </div>
                 )}
               </div>
@@ -2087,6 +2091,32 @@ export default function App() {
           </div>
         </div>
       )}
+      {/* Admin Confirmation Modal */}
+      <AnimatePresence>
+        {confirmAction && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setConfirmAction(null)} className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="relative bg-zinc-900 border border-white/10 p-8 rounded-3xl max-w-sm w-full text-center shadow-2xl">
+              <div className="w-16 h-16 bg-red-600/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                <Settings className="w-8 h-8 text-red-500 animate-spin-slow" />
+              </div>
+              <h3 className="text-xl font-black uppercase mb-2">Confirm Action</h3>
+              <p className="text-white/60 text-sm mb-8">
+                Are you sure you want to <span className="text-red-500 font-bold uppercase">{confirmAction.type}</span> 
+                {confirmAction.target ? ` for ${confirmAction.target}` : ' all players'}?
+                {confirmAction.amount !== undefined && ` (Amount: ${formatChips(confirmAction.amount)})`}
+              </p>
+              <div className="flex gap-3">
+                <button onClick={() => setConfirmAction(null)} className="flex-1 bg-white/5 hover:bg-white/10 p-4 rounded-xl font-bold uppercase text-xs transition-all">Cancel</button>
+                <button onClick={() => {
+                  adminAction(confirmAction.target, confirmAction.type as any, confirmAction.amount);
+                  setConfirmAction(null);
+                }} className="flex-1 bg-red-600 hover:bg-red-500 p-4 rounded-xl font-black uppercase text-xs transition-all shadow-lg shadow-red-600/20">Confirm</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
