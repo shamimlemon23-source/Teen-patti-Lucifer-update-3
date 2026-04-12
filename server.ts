@@ -501,7 +501,21 @@ async function startServer() {
     if (!game) return;
     const socketsInRoom = io.sockets.adapter.rooms.get(rid);
     if (socketsInRoom) {
-      // Pre-calculate common state to avoid repeated work
+      // Pre-calculate common player data
+      const playersData = game.players.map((p: any) => ({
+        id: p.id,
+        name: p.name,
+        chips: p.chips,
+        xp: p.xp || 0,
+        tier: p.tier || 'Bronze',
+        isFolded: p.isFolded,
+        isBlind: p.isBlind,
+        isBot: p.isBot,
+        profilePic: p.profilePic,
+        uid: p.uid,
+        seatIndex: p.seatIndex
+      }));
+
       const baseState = {
         id: game.id,
         type: game.type,
@@ -513,36 +527,30 @@ async function startServer() {
         currentTurn: game.currentTurn,
         turnStartTime: game.turnStartTime,
         turnDuration: game.turnDuration,
-        seats: game.seats,
-        players: game.players.map((p: any) => ({
-          id: p.id,
-          name: p.name,
-          chips: p.chips,
-          xp: p.xp || 0,
-          tier: p.tier || 'Bronze',
-          isFolded: p.isFolded,
-          isBlind: p.isBlind,
-          isBot: p.isBot,
-          profilePic: p.profilePic,
-          uid: p.uid,
-          seatIndex: p.seatIndex
-        }))
+        seats: game.seats
       };
+
+      // Pre-calculate hidden hands for everyone
+      const hiddenPlayers = playersData.map((p: any, idx: number) => {
+        const actualPlayer = game.players[idx];
+        return {
+          ...p,
+          hand: (game.winner || actualPlayer.isBot) ? actualPlayer.hand : actualPlayer.hand.map(() => ({ suit: 'back', rank: '?' }))
+        };
+      });
 
       for (const socketId of socketsInRoom) {
         const socket = io.sockets.sockets.get(socketId);
         if (socket) {
-          const stateToSend = { ...baseState };
-          stateToSend.players = game.players.map((p: any) => {
-            const pData = { ...baseState.players.find((pl: any) => pl.id === p.id) };
-            if (p.id === socketId || game.winner || p.isBot) {
-              pData.hand = p.hand;
-            } else {
-              pData.hand = p.hand.map(() => ({ suit: 'back', rank: '?' }));
+          // Clone hidden players and swap in the current socket's hand
+          const finalPlayers = hiddenPlayers.map((p: any, idx: number) => {
+            if (p.id === socketId) {
+              return { ...p, hand: game.players[idx].hand };
             }
-            return pData;
+            return p;
           });
-          socket.emit("gameState", stateToSend);
+
+          socket.emit("gameState", { ...baseState, players: finalPlayers });
         }
       }
     }
