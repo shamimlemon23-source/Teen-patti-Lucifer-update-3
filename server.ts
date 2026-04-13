@@ -1503,6 +1503,26 @@ async function startServer() {
       });
     });
 
+    socket.on("privateMessage", ({ targetId, message }) => {
+      if (!targetId || !message) return;
+      
+      let senderName = "Unknown";
+      Object.values(rooms).forEach((room: any) => {
+        const p = room.players.find((pl: any) => pl.id === socket.id);
+        if (p) senderName = p.name;
+      });
+
+      const msgData = {
+        senderId: socket.id,
+        senderName: senderName,
+        message: message.substring(0, 200),
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+
+      io.to(targetId).emit("privateMessage", msgData);
+      socket.emit("privateMessage", { ...msgData, isSelf: true, targetId });
+    });
+
     socket.on("getLeaderboard", async () => {
       try {
         if (!db) return;
