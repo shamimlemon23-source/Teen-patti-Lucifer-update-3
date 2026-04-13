@@ -204,6 +204,7 @@ export default function App() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [chatInput, setChatInput] = useState('');
   const [confirmAction, setConfirmAction] = useState<{ type: string, target: string | null, amount?: number } | null>(null);
+  const [wheelRotation, setWheelRotation] = useState(0);
   const chatEndRef = React.useRef<HTMLDivElement>(null);
 
   // Remember Login
@@ -369,17 +370,66 @@ export default function App() {
     });
 
     socket.on('spinResult', (data: { prize: string, chips: number, lastSpin: number }) => {
-      soundService.play('win');
-      setIsSpinning(false);
-      setSpinResult(data.prize);
-      setLastSpinTime(data.lastSpin);
-      setLobbyChips(data.chips);
-      confetti({ particleCount: 200, spread: 100, origin: { y: 0.6 } });
-      setTimeout(() => setSpinResult(null), 5000);
+      const prizes = ['10k', '20k', '30k', '50k', '1lac'];
+      const prizeIndex = prizes.indexOf(data.prize.toLowerCase());
+      
+      if (prizeIndex !== -1) {
+        // Calculate target rotation: current + some full spins + offset to the prize
+        setWheelRotation(prev => {
+          const currentBase = Math.ceil(prev / 360) * 360;
+          return currentBase + (360 * 5) - (prizeIndex * 72);
+        });
+      }
+
+      // Wait for the animation to finish (5 seconds)
+      setTimeout(() => {
+        soundService.play('win');
+        setIsSpinning(false);
+        setSpinResult(data.prize);
+        setLastSpinTime(data.lastSpin);
+        setLobbyChips(data.chips);
+        
+        // Special Effect: Multiple confetti bursts
+        confetti({ 
+          particleCount: 200, 
+          spread: 100, 
+          origin: { y: 0.5 },
+          colors: ['#ff0000', '#ffd700', '#ffffff']
+        });
+        
+        setTimeout(() => {
+          confetti({ 
+            particleCount: 150, 
+            spread: 70, 
+            origin: { y: 0.6 },
+            colors: ['#ff0000', '#ffd700']
+          });
+        }, 400);
+
+        setTimeout(() => {
+          confetti({ 
+            particleCount: 100, 
+            angle: 60,
+            spread: 55, 
+            origin: { x: 0 },
+            colors: ['#ffd700']
+          });
+          confetti({ 
+            particleCount: 100, 
+            angle: 120,
+            spread: 55, 
+            origin: { x: 1 },
+            colors: ['#ffd700']
+          });
+        }, 800);
+
+        setTimeout(() => setSpinResult(null), 8000);
+      }, 5000);
     });
 
     socket.on('spinError', (data: { message: string }) => {
       setIsSpinning(false);
+      setWheelRotation(prev => Math.ceil(prev / 360) * 360); // Snap to nearest full rotation
       alert(data.message);
     });
 
@@ -692,11 +742,16 @@ export default function App() {
     if (isSpinning) return;
     soundService.play('click');
     setIsSpinning(true);
+    setSpinResult(null);
     
+    // Start initial rotation
+    setWheelRotation(prev => prev + 360 * 2);
+
     const timeout = setTimeout(() => {
       setIsSpinning(prev => {
         if (prev) {
           alert("Spin timed out. Please check your internet and try again.");
+          setWheelRotation(r => Math.ceil(r / 360) * 360);
           return false;
         }
         return prev;
@@ -1541,7 +1596,7 @@ export default function App() {
             <div className="relative w-full h-full flex items-center justify-center overflow-hidden py-4">
               {/* Table Surface */}
               <div className="absolute w-[95%] h-[60%] md:w-[85%] md:h-[55%] bg-emerald-900/20 rounded-[100px] md:rounded-[200px] border-[8px] md:border-[15px] border-zinc-900/80 shadow-[inset_0_0_100px_rgba(0,0,0,0.8),0_20px_50px_rgba(0,0,0,0.5)] flex items-center justify-center overflow-hidden">
-                <img src={ASSETS.TABLE_BG} alt="Table" className="w-full h-full object-cover opacity-30 mix-blend-overlay" referrerPolicy="no-referrer" />
+                <img src={ASSETS.TABLE_BG} alt="Table" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
               </div>
               
               {/* Dealer */}
@@ -1955,8 +2010,8 @@ export default function App() {
 
                 {/* Wheel */}
                 <motion.div 
-                  animate={isSpinning ? { rotate: 360 * 10 } : { rotate: 0 }}
-                  transition={isSpinning ? { duration: 5, ease: "easeInOut" } : { duration: 0 }}
+                  animate={{ rotate: wheelRotation }}
+                  transition={{ duration: 5, ease: [0.15, 0, 0.15, 1] }}
                   className="w-full h-full rounded-full border-8 border-yellow-500/30 relative overflow-hidden shadow-[0_0_50px_rgba(234,179,8,0.3)] bg-zinc-900"
                 >
                   {[
@@ -1987,12 +2042,33 @@ export default function App() {
                 </motion.div>
               </div>
 
-              {spinResult ? (
-                <motion.div initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="text-center">
-                  <div className="text-yellow-500 font-black text-4xl mb-2">CONGRATS!</div>
+              {spinResult && (
+                <motion.div 
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm rounded-[3rem]"
+                >
+                  <motion.div
+                    animate={{ 
+                      scale: [1, 1.2, 1],
+                      rotate: [0, 5, -5, 0]
+                    }}
+                    transition={{ duration: 0.5, repeat: Infinity }}
+                    className="w-32 h-32 bg-yellow-500 rounded-full flex items-center justify-center shadow-[0_0_50px_rgba(234,179,8,0.8)] mb-6"
+                  >
+                    <Coins className="w-16 h-16 text-black" />
+                  </motion.div>
+                  <div className="text-yellow-500 font-black text-4xl uppercase tracking-tighter mb-2 drop-shadow-lg">CONGRATULATIONS!</div>
                   <div className="text-white font-black text-2xl uppercase tracking-widest">You Won {spinResult}</div>
+                  <button 
+                    onClick={() => setSpinResult(null)}
+                    className="mt-8 bg-white text-black px-8 py-3 rounded-full font-black uppercase tracking-widest hover:bg-yellow-500 transition-colors shadow-xl"
+                  >
+                    CLAIM NOW
+                  </button>
                 </motion.div>
-              ) : (
+              )}
+              {!spinResult && (
                 <button 
                   onClick={handleSpin}
                   disabled={isSpinning}
