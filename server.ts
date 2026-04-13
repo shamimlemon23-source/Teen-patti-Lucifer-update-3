@@ -1385,7 +1385,15 @@ async function startServer() {
 
     socket.on("spinWheel", async ({ name }) => {
       try {
+        if (!db) {
+          return socket.emit("spinError", { message: "Database connection error. Please try again later." });
+        }
+
         const dbData = await getPlayerChips(name, undefined, true);
+        if (dbData.error) {
+          return socket.emit("spinError", { message: dbData.error });
+        }
+
         const now = Date.now();
         const oneDay = 24 * 60 * 60 * 1000;
 
@@ -1407,8 +1415,9 @@ async function startServer() {
         const randomIndex = Math.floor(Math.random() * options.length);
         const win = options[randomIndex];
 
-        const newChips = dbData.chips + win.value;
+        const newChips = (Number(dbData.chips) || 0) + win.value;
         const playerRef = doc(db, 'players', name.toLowerCase().trim());
+        
         await updateDoc(playerRef, { 
           chips: newChips,
           last_spin: now
@@ -1424,6 +1433,13 @@ async function startServer() {
           }
         });
 
+        // Also update the socket's internal chip count if it's stored
+        for (const [id, s] of io.sockets.sockets) {
+          if ((s as any).playerName?.toLowerCase().trim() === safeName) {
+            s.emit("chipsUpdated", newChips);
+          }
+        }
+
         socket.emit("spinResult", { 
           prize: win.label, 
           chips: newChips, 
@@ -1431,7 +1447,7 @@ async function startServer() {
         });
       } catch (error) {
         console.error('Spin Wheel Error:', error);
-        socket.emit("spinError", { message: "Internal Server Error during spin" });
+        socket.emit("spinError", { message: "Internal Server Error during spin. Please try again." });
       }
     });
 
