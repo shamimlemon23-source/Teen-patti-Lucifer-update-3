@@ -1392,7 +1392,7 @@ export default function App() {
         <img 
           src={ASSETS.TABLE_BG} 
           alt="Background" 
-          className="w-full h-full object-cover opacity-20" 
+          className="w-full h-full object-cover opacity-40" 
           referrerPolicy="no-referrer" 
         />
         <div className="absolute inset-0 bg-gradient-to-b from-black via-transparent to-black" />
@@ -1595,7 +1595,7 @@ export default function App() {
             </AnimatePresence>
             <div className="relative w-full h-full flex items-center justify-center overflow-hidden py-4">
               {/* Table Surface */}
-              <div className="absolute w-[95%] h-[60%] md:w-[85%] md:h-[55%] bg-emerald-900/20 rounded-[100px] md:rounded-[200px] border-[8px] md:border-[15px] border-zinc-900/80 shadow-[inset_0_0_100px_rgba(0,0,0,0.8),0_20px_50px_rgba(0,0,0,0.5)] flex items-center justify-center overflow-hidden">
+              <div className="absolute w-[95%] h-[60%] md:w-[85%] md:h-[55%] bg-emerald-600/30 rounded-[100px] md:rounded-[200px] border-[8px] md:border-[15px] border-zinc-900/80 shadow-[inset_0_0_60px_rgba(0,0,0,0.5),0_20px_50px_rgba(0,0,0,0.5)] flex items-center justify-center overflow-hidden">
                 <img src={ASSETS.TABLE_BG} alt="Table" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
               </div>
               
