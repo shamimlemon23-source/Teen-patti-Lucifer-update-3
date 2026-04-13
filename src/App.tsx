@@ -27,6 +27,7 @@ import {
   Camera,
   Search,
   MessageCircle,
+  MessageSquare,
   X,
   Send
 } from 'lucide-react';
@@ -185,6 +186,8 @@ const CardComponent = React.memo(({ card, hidden, index }: CardComponentProps) =
   );
 });
 
+const CHAT_EMOJIS = ['😂', '😎', '😡', '😭', '😱', '💰', '🏆', '🔥', '👀', '😏', '😈', '🤡', '💀', '👍', '👏', '👎', '💥', '🤭', '🤫'];
+
 export default function App() {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [gameState, setGameState] = useState<GameState | null>(null);
@@ -205,6 +208,10 @@ export default function App() {
   const [chatInput, setChatInput] = useState('');
   const [confirmAction, setConfirmAction] = useState<{ type: string, target: string | null, amount?: number } | null>(null);
   const [wheelRotation, setWheelRotation] = useState(0);
+  const [privateChats, setPrivateChats] = useState<{ [userId: string]: { sender: string, message: string, timestamp: string }[] }>({});
+  const [activePrivateChat, setActivePrivateChat] = useState<{ id: string, name: string } | null>(null);
+  const [privateChatUnread, setPrivateChatUnread] = useState<{ [userId: string]: number }>({});
+  const [chatTab, setChatTab] = useState<'live' | 'private'>('live');
   const chatEndRef = React.useRef<HTMLDivElement>(null);
 
   // Remember Login
@@ -453,11 +460,33 @@ export default function App() {
     socket.on('chatMessage', (msg: {sender: string, message: string, timestamp: string}) => {
       setChatMessages(prev => [...prev.slice(-49), msg]);
       
-      // Play sound and update unread count if chat is closed or message is from someone else
-      if (msg.sender !== localStorage.getItem('lucifer_poker_name')) {
+      if (msg.sender !== name) {
         soundService.play('chat');
-        if (!isChatOpen) {
+        if (!isChatOpen || chatTab !== 'live') {
           setUnreadCount(prev => prev + 1);
+        }
+      }
+    });
+
+    socket.on('privateMessage', (msg: { senderId: string, senderName: string, message: string, timestamp: string, isSelf?: boolean, targetId?: string }) => {
+      const otherId = msg.isSelf ? msg.targetId! : msg.senderId;
+      const otherName = msg.isSelf ? activePrivateChat?.name || "User" : msg.senderName;
+
+      setPrivateChats(prev => {
+        const current = prev[otherId] || [];
+        return {
+          ...prev,
+          [otherId]: [...current.slice(-49), { sender: msg.senderName, message: msg.message, timestamp: msg.timestamp }]
+        };
+      });
+
+      if (!msg.isSelf) {
+        soundService.play('chat');
+        if (!isChatOpen || activePrivateChat?.id !== otherId) {
+          setPrivateChatUnread(prev => ({
+            ...prev,
+            [otherId]: (prev[otherId] || 0) + 1
+          }));
         }
       }
     });
@@ -601,9 +630,19 @@ export default function App() {
   }, [view, joined, socket, roomId]);
 
   const sendChatMessage = () => {
-    if (!chatInput.trim() || !socket || !roomId) return;
-    socket.emit('chatMessage', { roomId, message: chatInput });
+    if (!chatInput.trim() || !socket) return;
+    
+    if (chatTab === 'live' && roomId) {
+      socket.emit('chatMessage', { roomId, message: chatInput });
+    } else if (chatTab === 'private' && activePrivateChat) {
+      socket.emit('privateMessage', { targetId: activePrivateChat.id, message: chatInput });
+    }
+    
     setChatInput('');
+  };
+
+  const addEmoji = (emoji: string) => {
+    setChatInput(prev => prev + emoji);
   };
 
   const logout = () => {
@@ -1723,6 +1762,24 @@ export default function App() {
                             {isMe && (
                               <div className="absolute -top-3 -right-3 bg-yellow-500 text-black text-[8px] md:text-[10px] font-black px-2 py-1 rounded-lg shadow-xl z-10 uppercase tracking-tighter">You</div>
                             )}
+                            {!isMe && (
+                              <button 
+                                onClick={() => {
+                                  setActivePrivateChat({ id: player.id, name: player.name });
+                                  setChatTab('private');
+                                  setIsChatOpen(true);
+                                  setPrivateChatUnread(prev => ({ ...prev, [player.id]: 0 }));
+                                }}
+                                className="absolute -right-4 top-1/2 -translate-y-1/2 bg-blue-600 p-1.5 rounded-full shadow-lg border border-blue-400/50 hover:bg-blue-500 transition-all active:scale-90 z-50"
+                              >
+                                <MessageSquare className="w-3 h-3 md:w-4 md:h-4 text-white" />
+                                {privateChatUnread[player.id] > 0 && (
+                                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] w-4 h-4 rounded-full flex items-center justify-center font-bold border border-white/20">
+                                    {privateChatUnread[player.id]}
+                                  </span>
+                                )}
+                              </button>
+                            )}
                             {!player.isBlind && !player.isFolded && (
                               <div className="absolute -bottom-3 bg-emerald-500 text-white text-[6px] md:text-[8px] font-black px-2 py-0.5 rounded-full shadow-lg z-10 uppercase tracking-widest border border-emerald-400/50">Seen</div>
                             )}
@@ -2095,36 +2152,120 @@ export default function App() {
                 exit={{ opacity: 0, scale: 0.9, y: 20 }}
                 className="bg-zinc-950/95 backdrop-blur-3xl border border-white/10 w-72 md:w-96 h-[400px] rounded-3xl shadow-2xl flex flex-col overflow-hidden mb-2"
               >
-                <div className="p-4 border-b border-white/10 flex items-center justify-between bg-white/5">
-                  <div className="flex items-center gap-2">
-                    <MessageCircle className="w-5 h-5 text-red-500" />
-                    <span className="font-black text-sm uppercase tracking-widest text-white">Live Chat</span>
-                  </div>
-                  <button onClick={() => setIsChatOpen(false)} className="text-white/40 hover:text-white">
+                <div className="flex border-b border-white/10 bg-white/5">
+                  <button 
+                    onClick={() => setChatTab('live')}
+                    className={`flex-1 p-4 flex items-center justify-center gap-2 transition-all ${chatTab === 'live' ? 'bg-red-600 text-white' : 'text-white/40 hover:bg-white/5'}`}
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    <span className="font-black text-[10px] uppercase tracking-widest">Live</span>
+                    {unreadCount > 0 && chatTab !== 'live' && (
+                      <span className="bg-white text-red-600 text-[8px] w-4 h-4 rounded-full flex items-center justify-center font-bold">{unreadCount}</span>
+                    )}
+                  </button>
+                  <button 
+                    onClick={() => setChatTab('private')}
+                    className={`flex-1 p-4 flex items-center justify-center gap-2 transition-all ${chatTab === 'private' ? 'bg-blue-600 text-white' : 'text-white/40 hover:bg-white/5'}`}
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    <span className="font-black text-[10px] uppercase tracking-widest">Private</span>
+                    {(Object.values(privateChatUnread) as number[]).reduce((a, b) => a + b, 0) > 0 && chatTab !== 'private' && (
+                      <span className="bg-white text-blue-600 text-[8px] w-4 h-4 rounded-full flex items-center justify-center font-bold">
+                        {(Object.values(privateChatUnread) as number[]).reduce((a, b) => a + b, 0)}
+                      </span>
+                    )}
+                  </button>
+                  <button onClick={() => setIsChatOpen(false)} className="p-4 text-white/40 hover:text-white border-l border-white/10">
                     <X className="w-5 h-5" />
                   </button>
                 </div>
                 
                 <div className="flex-1 overflow-y-auto p-4 space-y-3 scrollbar-hide">
-                  {chatMessages.length === 0 ? (
-                    <div className="h-full flex flex-col items-center justify-center text-white/20 gap-2">
-                      <MessageCircle className="w-12 h-12" />
-                      <span className="text-xs font-bold uppercase tracking-widest">No messages yet</span>
-                    </div>
-                  ) : (
-                    chatMessages.map((msg, i) => (
-                      <div key={i} className={`flex flex-col ${msg.sender === name ? 'items-end' : 'items-start'}`}>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[10px] font-bold text-white/40">{msg.sender}</span>
-                          <span className="text-[8px] text-white/20">{msg.timestamp}</span>
+                  {chatTab === 'live' ? (
+                    chatMessages.length === 0 ? (
+                      <div className="h-full flex flex-col items-center justify-center text-white/20 gap-2">
+                        <MessageCircle className="w-12 h-12" />
+                        <span className="text-xs font-bold uppercase tracking-widest">No messages yet</span>
+                      </div>
+                    ) : (
+                      chatMessages.map((msg, i) => (
+                        <div key={i} className={`flex flex-col ${msg.sender === name ? 'items-end' : 'items-start'}`}>
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[10px] font-bold text-white/40">{msg.sender}</span>
+                            <span className="text-[8px] text-white/20">{msg.timestamp}</span>
+                          </div>
+                          <div className={`px-3 py-2 rounded-2xl text-sm max-w-[85%] break-words ${msg.sender === name ? 'bg-red-600 text-white rounded-tr-none' : 'bg-white/10 text-white rounded-tl-none'}`}>
+                            {msg.message}
+                          </div>
                         </div>
-                        <div className={`px-3 py-2 rounded-2xl text-sm max-w-[85%] break-words ${msg.sender === name ? 'bg-red-600 text-white rounded-tr-none' : 'bg-white/10 text-white rounded-tl-none'}`}>
-                          {msg.message}
+                      ))
+                    )
+                  ) : (
+                    !activePrivateChat ? (
+                      <div className="h-full flex flex-col items-center justify-center text-white/20 gap-4 p-4 text-center">
+                        <MessageSquare className="w-12 h-12" />
+                        <span className="text-xs font-bold uppercase tracking-widest">Select a player at the table to start a private chat</span>
+                        <div className="space-y-2 w-full max-h-48 overflow-y-auto">
+                          {Object.keys(privateChats).map(uid => (
+                            <button 
+                              key={uid}
+                              onClick={() => {
+                                setActivePrivateChat({ id: uid, name: privateChats[uid][0]?.sender || 'User' });
+                                setPrivateChatUnread(prev => ({ ...prev, [uid]: 0 }));
+                              }}
+                              className="w-full bg-white/5 p-3 rounded-xl flex items-center justify-between hover:bg-white/10 transition-all"
+                            >
+                              <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-[10px] font-bold">
+                                  {(privateChats[uid][0]?.sender || 'U')[0]}
+                                </div>
+                                <span className="text-xs font-bold text-white">{privateChats[uid][0]?.sender || 'User'}</span>
+                              </div>
+                              {privateChatUnread[uid] > 0 && (
+                                <span className="bg-red-500 text-white text-[8px] w-4 h-4 rounded-full flex items-center justify-center font-bold">{privateChatUnread[uid]}</span>
+                              )}
+                            </button>
+                          ))}
                         </div>
                       </div>
-                    ))
+                    ) : (
+                      <div className="h-full flex flex-col">
+                        <div className="flex items-center justify-between mb-4 bg-blue-600/20 p-2 rounded-xl border border-blue-500/30">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center text-[8px] font-bold">{activePrivateChat.name[0]}</div>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-blue-400">{activePrivateChat.name}</span>
+                          </div>
+                          <button onClick={() => setActivePrivateChat(null)} className="text-[8px] font-black uppercase tracking-widest text-white/40 hover:text-white">Back</button>
+                        </div>
+                        <div className="space-y-3">
+                          {(privateChats[activePrivateChat.id] || []).map((msg, i) => (
+                            <div key={i} className={`flex flex-col ${msg.sender === name ? 'items-end' : 'items-start'}`}>
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-[10px] font-bold text-white/40">{msg.sender}</span>
+                                <span className="text-[8px] text-white/20">{msg.timestamp}</span>
+                              </div>
+                              <div className={`px-3 py-2 rounded-2xl text-sm max-w-[85%] break-words ${msg.sender === name ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-white/10 text-white rounded-tl-none'}`}>
+                                {msg.message}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )
                   )}
                   <div ref={chatEndRef} />
+                </div>
+
+                <div className="px-4 py-2 bg-black/20 border-t border-white/5 flex gap-2 overflow-x-auto scrollbar-hide">
+                  {CHAT_EMOJIS.map(emoji => (
+                    <button 
+                      key={emoji} 
+                      onClick={() => addEmoji(emoji)}
+                      className="text-lg hover:scale-125 transition-transform active:scale-90"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
                 </div>
 
                 <div className="p-4 bg-black/40 border-t border-white/10">
@@ -2133,10 +2274,10 @@ export default function App() {
                       type="text"
                       value={chatInput}
                       onChange={(e) => setChatInput(e.target.value)}
-                      placeholder="Type a message..."
+                      placeholder={chatTab === 'live' ? "Message all..." : `Message ${activePrivateChat?.name || 'player'}...`}
                       className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-red-500/50"
                     />
-                    <button type="submit" className="bg-red-600 p-2 rounded-xl hover:bg-red-500 transition-all">
+                    <button type="submit" className={`p-2 rounded-xl transition-all ${chatTab === 'live' ? 'bg-red-600 hover:bg-red-500' : 'bg-blue-600 hover:bg-blue-500'}`}>
                       <Send className="w-5 h-5 text-white" />
                     </button>
                   </form>
