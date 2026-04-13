@@ -40,7 +40,7 @@ type Rank = '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | 'J' | 'Q' | '
 // Custom Asset URLs
 const ASSETS = {
   LOGO: "https://i.imgur.com/swQATPt.png",
-  TABLE_BG: "https://i.imgur.com/Wupafhm.png",
+  TABLE_BG: "https://i.imgur.com/evimPKZ.png",
   SPLASH_BG: "https://i.imgur.com/Gg4BaeV.png",
   DEALER: "https://i.imgur.com/Wwp3cG0.png"
 };
@@ -696,12 +696,12 @@ export default function App() {
     const timeout = setTimeout(() => {
       setIsSpinning(prev => {
         if (prev) {
-          alert("Spin timed out. Please try again.");
+          alert("Spin timed out. Please check your internet and try again.");
           return false;
         }
         return prev;
       });
-    }, 10000);
+    }, 30000);
 
     socket?.emit('spinWheel', { name });
     
